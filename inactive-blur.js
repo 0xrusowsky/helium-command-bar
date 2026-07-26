@@ -19,7 +19,7 @@
       "pointer-events: none !important",
       "border-radius: 7px !important",
       `background: ${focused ? "transparent" : `rgba(12, 10, 16, ${blur ? "0.12" : "0.075"})`} !important`,
-      `box-shadow: ${focused ? "inset 0 0 0 3px rgba(0, 0, 0, 0.88), inset 0 0 14px rgba(0, 0, 0, 0.14)" : "none"} !important`,
+      `box-shadow: ${focused ? "inset 0 0 0 3px rgba(0, 0, 0, 0.88), inset 0 0 9px 3px rgba(0, 0, 0, 0.20), inset 0 0 20px 7px rgba(0, 0, 0, 0.07)" : "none"} !important`,
       `backdrop-filter: ${blur ? "blur(3px)" : "none"} !important`,
       `-webkit-backdrop-filter: ${blur ? "blur(3px)" : "none"} !important`,
       "transition: background 140ms ease, box-shadow 140ms ease, backdrop-filter 140ms ease !important"

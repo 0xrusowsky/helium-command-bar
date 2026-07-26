@@ -103,10 +103,7 @@ async function syncInactiveSplitEffects(providedTabs) {
   const desired = new Map();
 
   for (const activeTab of tabs.filter((tab) => tab.active)) {
-    const partners = getSplitPartners(tabs, activeTab);
-    if (!partners.length) continue;
-    desired.set(activeTab.id, "focus");
-    for (const partner of partners) desired.set(partner.id, "dim");
+    if (getSplitPartners(tabs, activeTab).length) desired.set(activeTab.id, "focus");
   }
 
   for (const [ownerTabId, partnerIds] of blurredPartnersByOwner) {
@@ -524,7 +521,13 @@ chrome.permissions.onRemoved.addListener((permissions) => {
 });
 chrome.runtime.onInstalled.addListener(() => {
   void scanForNativeSplitPickers();
-  void syncInactiveSplitEffects();
+  void (async () => {
+    const tabs = await chrome.tabs.query({});
+    blurredPartnersByOwner.clear();
+    inactiveEffectByTab.clear();
+    await Promise.allSettled(tabs.map((tab) => removeInactiveEffectFromTab(tab.id)));
+    await syncInactiveSplitEffects(tabs);
+  })();
 });
 chrome.runtime.onStartup.addListener(() => {
   void scanForNativeSplitPickers();
