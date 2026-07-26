@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Helium Command Bar settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="icons/icon-48.png" width="40" height="40" alt="">
+        <div>
+          <h1>Helium Command Bar</h1>
+          <p>Settings</p>
+        </div>
+      </header>
+
+      <section aria-labelledby="split-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="split-heading">Default split view appearance</h2>
+            <p>Choose how split tabs appear whenever the command bar opens or the query changes.</p>
+          </div>
+          <span id="save-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <fieldset>
+          <legend class="visually-hidden">Default split view appearance</legend>
+
+          <label class="choice">
+            <input type="radio" name="defaultSplitMode" value="compact">
+            <span class="choice-content">
+              <span class="choice-title">Compact</span>
+              <span class="choice-description">Select the split as one result, with both tabs shown side by side.</span>
+              <span class="compact-preview preview" aria-hidden="true">
+                <span><i>A</i><b>Documentation</b></span>
+                <span><i>P</i><b>Preview</b></span>
+                <kbd>→</kbd>
+              </span>
+            </span>
+          </label>
+
+          <label class="choice">
+            <input type="radio" name="defaultSplitMode" value="expanded">
+            <span class="choice-content">
+              <span class="choice-title">Expanded</span>
+              <span class="choice-description">Show both full tab rows immediately, while selecting their split wrapper first.</span>
+              <span class="expanded-preview preview" aria-hidden="true">
+                <em>Split view</em>
+                <span><i>A</i><b>Documentation</b></span>
+                <span><i>P</i><b>Preview</b></span>
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
+        <p class="hint">Press <kbd>→</kbd> to enter individual tab navigation and <kbd>←</kbd> to return to the complete split group. Compact mode expands and collapses visually as you do.</p>
+      </section>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

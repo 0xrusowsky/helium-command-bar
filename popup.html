@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Helium Command Bar</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <section class="command-bar" aria-label="Helium Command Bar">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+        </svg>
+        <input
+          id="query"
+          type="text"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-controls="results"
+          aria-autocomplete="list"
+          aria-activedescendant=""
+          placeholder="Search open/closed tabs or enter a URL…"
+          autofocus
+        >
+        <kbd id="escape-hint">esc</kbd>
+      </div>
+
+      <div id="result-label" class="visually-hidden" role="status" aria-live="polite">Open tabs</div>
+      <div id="empty" class="empty" hidden>No open or recently closed tabs found</div>
+      <div id="results" role="listbox" aria-label="Command results"></div>
+
+      <footer>
+        <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
+        <span><kbd>↵</kbd> open</span>
+        <span><kbd>⌘⌫</kbd> close tab</span>
+      </footer>
+    </section>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

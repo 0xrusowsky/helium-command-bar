@@ -1,0 +1,621 @@
+(async () => {
+  const rootId = `helium-command-bar-${chrome.runtime.id}`;
+  const existing = document.getElementById(rootId);
+  if (existing) {
+    existing.remove();
+    return;
+  }
+
+  const root = document.createElement("div");
+  root.id = rootId;
+  root.style.cssText = [
+    "all: initial !important",
+    "position: fixed !important",
+    "inset: 0 !important",
+    "z-index: 2147483647 !important",
+    "display: block !important"
+  ].join(";");
+  document.documentElement.append(root);
+
+  let initial;
+  try {
+    initial = await chrome.runtime.sendMessage({
+      type: "helium-command-bar:query",
+      query: ""
+    });
+  } catch (error) {
+    console.error("Could not open Helium Command Bar", error);
+    root.remove();
+    return;
+  }
+  if (!root.isConnected || !initial) return;
+
+  const shadow = root.attachShadow({ mode: "closed" });
+  const style = document.createElement("style");
+  style.textContent = initial.css;
+
+  const backdrop = document.createElement("div");
+  Object.assign(backdrop.style, {
+    all: "initial",
+    position: "absolute",
+    inset: "0",
+    display: "grid",
+    placeItems: "center",
+    boxSizing: "border-box",
+    padding: "20px",
+    background: "rgba(12, 10, 16, 0.18)",
+    backdropFilter: "blur(2px)"
+  });
+
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function svgIcon(pathData, className = "row-icon") {
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.classList.add(className);
+    const path = document.createElementNS(namespace, "path");
+    path.setAttribute("d", pathData);
+    svg.append(path);
+    return svg;
+  }
+
+  const commandBar = element("section", "command-bar");
+  commandBar.setAttribute("aria-label", "Helium Command Bar");
+
+  const searchBox = element("div", "search-box");
+  searchBox.append(svgIcon(
+    "m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z",
+    "search-icon"
+  ));
+
+  const queryInput = element("input");
+  queryInput.id = "query";
+  queryInput.type = "text";
+  queryInput.autocomplete = "off";
+  queryInput.autocapitalize = "off";
+  queryInput.spellcheck = false;
+  queryInput.placeholder = "Search open/closed tabs or enter a URL…";
+  queryInput.setAttribute("aria-controls", "results");
+  queryInput.setAttribute("aria-autocomplete", "list");
+
+  const escapeHint = element("kbd", "", "esc");
+  escapeHint.id = "escape-hint";
+  searchBox.append(queryInput, escapeHint);
+
+  const resultLabel = element("div", "visually-hidden", initial.label);
+  resultLabel.id = "result-label";
+  resultLabel.setAttribute("role", "status");
+  resultLabel.setAttribute("aria-live", "polite");
+  const emptyElement = element("div", "empty", "No open or recently closed tabs found");
+  emptyElement.id = "empty";
+  emptyElement.hidden = true;
+  const resultsElement = element("div");
+  resultsElement.id = "results";
+  resultsElement.setAttribute("role", "listbox");
+  resultsElement.setAttribute("aria-label", "Command results");
+
+  const footer = element("footer");
+  const selectHelp = element("span");
+  selectHelp.append(element("kbd", "", "↑"), element("kbd", "", "↓"), document.createTextNode(" select"));
+  const openHelp = element("span");
+  openHelp.append(element("kbd", "", "↵"), document.createTextNode(" open"));
+  const closeHelp = element("span");
+  closeHelp.append(element("kbd", "", "⌘⌫"), document.createTextNode(" close tab"));
+  footer.append(selectHelp, openHelp, closeHelp);
+
+  commandBar.append(searchBox, resultLabel, emptyElement, resultsElement, footer);
+  backdrop.append(commandBar);
+  shadow.append(style, backdrop);
+
+  // Keep command-bar keystrokes and clicks from reaching page-level bubble
+  // listeners. The UI itself remains in an isolated JavaScript world.
+  for (const eventName of ["keydown", "keyup", "keypress", "input", "click", "mousedown", "mouseup"])
+    commandBar.addEventListener(eventName, (event) => event.stopPropagation());
+
+  let rows = initial.rows;
+  let navigationItems = [];
+  let selectedIndex = 0;
+  let queryGeneration = 0;
+  let defaultSplitExpanded = Boolean(initial.defaultSplitExpanded);
+  const splitNavigationKeys = new Set();
+
+  function isSplitVisuallyExpanded(splitKey) {
+    return defaultSplitExpanded || splitNavigationKeys.has(splitKey);
+  }
+
+  function closeCommandBar() {
+    root.remove();
+  }
+
+  function hostnameFor(item) {
+    const value = item.url || item.pendingUrl || "";
+    try {
+      const url = new URL(value);
+      return url.hostname || url.protocol.replace(":", "");
+    } catch {
+      return value;
+    }
+  }
+
+  function setSelected(index, { scroll = true } = {}) {
+    if (!navigationItems.length) return;
+    selectedIndex = (index + navigationItems.length) % navigationItems.length;
+
+    navigationItems.forEach((item, itemIndex) => {
+      const selected = itemIndex === selectedIndex;
+      item.element.classList.toggle("selected", selected);
+      item.element.setAttribute("aria-selected", String(selected));
+    });
+
+    const selectedElement = navigationItems[selectedIndex]?.element;
+    queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
+    if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+  }
+
+  function makeFaviconBox(item, extraClass = "") {
+    const iconBox = element("span", `favicon-box ${extraClass}`.trim());
+    const fallback = element(
+      "span",
+      "favicon-fallback",
+      (item.title || hostnameFor(item) || "T").trim().charAt(0).toLocaleUpperCase()
+    );
+    iconBox.append(fallback);
+
+    if (item.favIconUrl && !item.favIconUrl.startsWith("chrome://")) {
+      const favicon = element("img", "favicon");
+      favicon.src = item.favIconUrl;
+      favicon.alt = "";
+      favicon.referrerPolicy = "no-referrer";
+      favicon.addEventListener("load", () => fallback.remove());
+      favicon.addEventListener("error", () => favicon.remove());
+      iconBox.append(favicon);
+    }
+    return iconBox;
+  }
+
+  function makeTabRow(row, index) {
+    const { tab } = row;
+    const rowElement = element(
+      "li",
+      `result-row tab-row${row.kind === "split-member" ? " split-member-row" : ""}`
+    );
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const details = element("span", "result-details");
+    details.append(
+      element("span", "result-title", tab.title || "Untitled tab"),
+      element("span", "result-subtitle", hostnameFor(tab))
+    );
+
+    const trailing = element("span", "row-trailing");
+    if (tab.active) trailing.append(element("span", "current-pill", "Active"));
+
+    const closeButton = element("button", "close-tab", "×");
+    closeButton.type = "button";
+    closeButton.title = "Close tab";
+    closeButton.setAttribute("aria-label", `Close ${tab.title || "tab"}`);
+    closeButton.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await closeTab(tab.id);
+    });
+    trailing.append(closeButton);
+    rowElement.append(makeFaviconBox(tab), details, trailing);
+    return rowElement;
+  }
+
+  function splitRepresentative(memberRows) {
+    return memberRows.find((row) => row.tab.active)?.tab ||
+      [...memberRows].sort((left, right) => (right.tab.lastAccessed || 0) - (left.tab.lastAccessed || 0))[0]?.tab;
+  }
+
+  function makeSplitGroup(size, navigationEntered) {
+    const group = element(
+      "li",
+      `split-group expanded${navigationEntered ? " navigation-entered" : ""}`
+    );
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", `Expanded split view with ${size} tabs`);
+
+    const header = element("div", "split-group-header");
+    header.append(
+      svgIcon(
+        "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm9 0h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v-13Z",
+        "split-group-icon"
+      ),
+      document.createTextNode("Split view"),
+      element("kbd", "split-navigation-hint", navigationEntered ? "←" : "→")
+    );
+
+    const entries = element("ul", "split-group-entries");
+    entries.setAttribute("role", "presentation");
+    group.append(header, entries);
+    return { group, entries };
+  }
+
+  function makeCompactFavicon(tab) {
+    const iconBox = element("span", "compact-favicon-box");
+    const fallback = element(
+      "span",
+      "",
+      (tab.title || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase()
+    );
+    iconBox.append(fallback);
+
+    if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
+      const favicon = element("img");
+      favicon.src = tab.favIconUrl;
+      favicon.alt = "";
+      favicon.referrerPolicy = "no-referrer";
+      favicon.addEventListener("load", () => fallback.remove());
+      favicon.addEventListener("error", () => favicon.remove());
+      iconBox.append(favicon);
+    }
+    return iconBox;
+  }
+
+  function makeCollapsedSplit(memberRows, index) {
+    const group = element("li", "split-group collapsed");
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", `Split view with ${memberRows.length} tabs`);
+
+    const option = element("div", "result-row split-collapsed-row");
+    option.id = `result-${index}`;
+    option.setAttribute("role", "option");
+
+    const columns = element("span", "split-columns");
+    memberRows.forEach((memberRow) => {
+      const { tab } = memberRow;
+      const column = element("button", "split-column");
+      column.type = "button";
+      column.title = `Open split and focus ${tab.title || "tab"}`;
+      const details = element("span", "split-column-details");
+      details.append(
+        element("span", "split-column-title", tab.title || "Untitled tab"),
+        element("span", "split-column-subtitle", hostnameFor(tab))
+      );
+      column.append(makeCompactFavicon(tab), details);
+      column.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await activateTab(tab);
+      });
+      columns.append(column);
+    });
+
+    const hint = element("kbd", "split-navigation-hint", "→");
+    hint.title = "Enter split navigation";
+    option.append(columns, hint);
+    group.append(option);
+    return { group, option };
+  }
+
+  function makeClosedRow(row, index) {
+    const { closed } = row;
+    const rowElement = element("li", "result-row recently-closed-row");
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const details = element("span", "result-details");
+    const location = hostnameFor(closed);
+    const closedType = closed.isWindow
+      ? `${closed.tabCount} tabs · Recently closed window`
+      : "Recently closed";
+    details.append(
+      element("span", "result-title", closed.title),
+      element("span", "result-subtitle", location ? `${location} · ${closedType}` : closedType)
+    );
+
+    const restore = element("span", "restore-pill");
+    restore.append(
+      svgIcon("M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5", "restore-icon"),
+      document.createTextNode("Restore")
+    );
+    rowElement.append(makeFaviconBox(closed, "closed-favicon-box"), details, restore);
+    return rowElement;
+  }
+
+  function makeSettingRow(row, index) {
+    const { setting } = row;
+    const rowElement = element("li", "result-row setting-row");
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const iconBox = element("span", "setting-icon-box");
+    iconBox.append(svgIcon(
+      "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4",
+      "setting-icon"
+    ));
+
+    const details = element("span", "result-details");
+    details.append(
+      element("span", "result-title", setting.title),
+      element("span", "result-subtitle", `${setting.description} · Helium settings`)
+    );
+    rowElement.append(iconBox, details, element("kbd", "enter-hint", "↵"));
+    return rowElement;
+  }
+
+  function makeLaunchRow(row, index) {
+    const rowElement = element("li", "result-row launch-row");
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const iconBox = element("span", "launch-icon-box");
+    const isUrl = row.target.kind === "url";
+    iconBox.append(svgIcon(
+      isUrl
+        ? "M14 5h5v5m0-5L10 14m7 0v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4"
+        : "m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+    ));
+
+    const details = element("span", "result-details");
+    details.append(
+      element(
+        "span",
+        "result-title",
+        isUrl ? `Open ${row.target.display}` : `Search for “${row.target.text}”`
+      ),
+      element(
+        "span",
+        "result-subtitle",
+        isUrl ? "New tab" : "Default search engine · New tab"
+      )
+    );
+
+    const isMac = navigator.userAgentData?.platform === "macOS" || /Mac/.test(navigator.platform);
+    const enterHint = element("kbd", "enter-hint", isMac ? "⌘↵" : "Ctrl↵");
+    enterHint.title = "Always open or search the input in a new tab";
+    rowElement.append(iconBox, details, enterHint);
+    return rowElement;
+  }
+
+  function bindNavigationItem(rowElement, item) {
+    const index = navigationItems.length;
+    const navigationItem = { ...item, element: rowElement };
+    navigationItems.push(navigationItem);
+    rowElement.id = `result-${index}`;
+    rowElement.dataset.navigationIndex = String(index);
+    rowElement.addEventListener("mousedown", (event) => event.preventDefault());
+    rowElement.addEventListener("click", () => activateNavigationItem(index));
+    rowElement.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+    return rowElement;
+  }
+
+  function makeResultSection(title) {
+    const section = element("section", "result-section");
+    const heading = element("div", "result-section-heading", title);
+    const list = element("ul", "result-section-list");
+    list.setAttribute("role", "presentation");
+    section.append(heading, list);
+    return { section, list };
+  }
+
+  function renderRows() {
+    const fragment = document.createDocumentFragment();
+    const sections = {
+      search: makeResultSection("Search"),
+      open: makeResultSection("Open"),
+      closed: makeResultSection("Recently closed")
+    };
+    navigationItems = [];
+    let rowIndex = 0;
+
+    while (rowIndex < rows.length) {
+      const row = rows[rowIndex];
+      if (row.kind === "split-member") {
+        const splitKey = row.splitKey;
+        const memberRows = [];
+        while (rowIndex < rows.length && rows[rowIndex].kind === "split-member" && rows[rowIndex].splitKey === splitKey) {
+          memberRows.push(rows[rowIndex]);
+          rowIndex += 1;
+        }
+
+        const navigationEntered = splitNavigationKeys.has(splitKey);
+        if (isSplitVisuallyExpanded(splitKey)) {
+          const { group, entries } = makeSplitGroup(memberRows.length, navigationEntered);
+          if (navigationEntered) {
+            memberRows.forEach((memberRow) => {
+              const rowElement = makeTabRow(memberRow, navigationItems.length);
+              entries.append(bindNavigationItem(rowElement, { kind: "split-member", row: memberRow, splitKey, memberRows }));
+            });
+          } else {
+            memberRows.forEach((memberRow) => {
+              const rowElement = makeTabRow(memberRow, navigationItems.length);
+              rowElement.removeAttribute("id");
+              rowElement.setAttribute("role", "presentation");
+              rowElement.addEventListener("mousedown", (event) => event.preventDefault());
+              rowElement.addEventListener("click", async (event) => {
+                event.stopPropagation();
+                await activateTab(memberRow.tab);
+              });
+              entries.append(rowElement);
+            });
+            group.setAttribute("role", "option");
+            bindNavigationItem(group, { kind: "split-group", splitKey, memberRows });
+          }
+          sections.open.list.append(group);
+        } else {
+          const { group, option } = makeCollapsedSplit(memberRows, navigationItems.length);
+          bindNavigationItem(option, { kind: "split-group", splitKey, memberRows });
+          sections.open.list.append(group);
+        }
+        continue;
+      }
+
+      let rowElement;
+      if (row.kind === "tab") rowElement = makeTabRow(row, navigationItems.length);
+      else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
+      else if (row.kind === "setting") rowElement = makeSettingRow(row, navigationItems.length);
+      else rowElement = makeLaunchRow(row, navigationItems.length);
+      const section = row.kind === "launch" || row.kind === "setting"
+        ? sections.search
+        : row.kind === "closed" ? sections.closed : sections.open;
+      section.list.append(bindNavigationItem(rowElement, { kind: "row", row }));
+      rowIndex += 1;
+    }
+
+    for (const section of Object.values(sections)) {
+      if (section.list.childElementCount > 0) fragment.append(section.section);
+    }
+    resultsElement.replaceChildren(fragment);
+    emptyElement.hidden = rows.length !== 0;
+    selectedIndex = Math.max(0, Math.min(selectedIndex, navigationItems.length - 1));
+    setSelected(selectedIndex, { scroll: false });
+  }
+
+  async function refreshRows({ resetSelection = false } = {}) {
+    const generation = ++queryGeneration;
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "helium-command-bar:query",
+        query: queryInput.value
+      });
+      if (generation !== queryGeneration || !response) return;
+      rows = response.rows;
+      resultLabel.textContent = response.label;
+      defaultSplitExpanded = Boolean(response.defaultSplitExpanded);
+      if (resetSelection) selectedIndex = 0;
+      renderRows();
+    } catch (error) {
+      console.error("Could not refresh command bar", error);
+    }
+  }
+
+  async function sendAction(message, { close = true } = {}) {
+    try {
+      const response = await chrome.runtime.sendMessage(message);
+      if (close && response?.ok) closeCommandBar();
+      return response;
+    } catch (error) {
+      console.error("Command bar action failed", error);
+      return undefined;
+    }
+  }
+
+  async function activateTab(tab) {
+    await sendAction({
+      type: "helium-command-bar:activate-tab",
+      tabId: tab.id,
+      windowId: tab.windowId
+    });
+  }
+
+  async function activateNavigationItem(index = selectedIndex) {
+    const item = navigationItems[index];
+    if (!item) return;
+
+    if (item.kind === "split-group") {
+      await activateTab(splitRepresentative(item.memberRows));
+    } else if (item.kind === "split-member") {
+      await activateTab(item.row.tab);
+    } else if (item.row.kind === "tab") {
+      await activateTab(item.row.tab);
+    } else if (item.row.kind === "closed") {
+      await sendAction({
+        type: "helium-command-bar:restore-session",
+        sessionId: item.row.closed.sessionId
+      });
+    } else if (item.row.kind === "setting") {
+      await sendAction({
+        type: "helium-command-bar:open-setting",
+        settingId: item.row.setting.id
+      });
+    } else {
+      await openInput();
+    }
+  }
+
+  function enterSplitNavigation(item) {
+    splitNavigationKeys.add(item.splitKey);
+    renderRows();
+    const firstMemberIndex = navigationItems.findIndex(
+      (candidate) => candidate.kind === "split-member" && candidate.splitKey === item.splitKey
+    );
+    if (firstMemberIndex !== -1) setSelected(firstMemberIndex);
+  }
+
+  function exitSplitNavigation(item) {
+    splitNavigationKeys.delete(item.splitKey);
+    renderRows();
+    const groupIndex = navigationItems.findIndex(
+      (candidate) => candidate.kind === "split-group" && candidate.splitKey === item.splitKey
+    );
+    if (groupIndex !== -1) setSelected(groupIndex);
+  }
+
+  async function openInput() {
+    await sendAction({
+      type: "helium-command-bar:open-input",
+      input: queryInput.value
+    });
+  }
+
+  async function closeTab(tabId) {
+    const response = await sendAction(
+      { type: "helium-command-bar:close-tab", tabId },
+      { close: false }
+    );
+    if (response?.ok && root.isConnected) {
+      await refreshRows();
+      queryInput.focus();
+    }
+  }
+
+  backdrop.addEventListener("mousedown", (event) => {
+    if (event.target === backdrop) closeCommandBar();
+  });
+  queryInput.addEventListener("input", () => {
+    splitNavigationKeys.clear();
+    refreshRows({ resetSelection: true });
+  });
+  queryInput.addEventListener("keydown", async (event) => {
+    if (event.isComposing) return;
+
+    if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) {
+      event.preventDefault();
+      setSelected(selectedIndex + 1);
+    } else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) {
+      event.preventDefault();
+      setSelected(selectedIndex - 1);
+    } else if (event.key === "ArrowRight") {
+      const item = navigationItems[selectedIndex];
+      if (item?.kind === "split-group") {
+        event.preventDefault();
+        enterSplitNavigation(item);
+      }
+    } else if (event.key === "ArrowLeft") {
+      const item = navigationItems[selectedIndex];
+      if (item?.kind === "split-member") {
+        event.preventDefault();
+        exitSplitNavigation(item);
+      }
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (event.metaKey || event.ctrlKey) await openInput();
+      else await activateNavigationItem();
+    } else if (event.key === "Backspace" && (event.metaKey || event.ctrlKey)) {
+      const item = navigationItems[selectedIndex];
+      const tab = item?.kind === "split-member"
+        ? item.row.tab
+        : item?.kind === "row" && item.row.kind === "tab" ? item.row.tab : null;
+      if (tab) {
+        event.preventDefault();
+        await closeTab(tab.id);
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeCommandBar();
+    }
+  });
+
+  rows = initial.rows;
+  renderRows();
+  queryInput.focus();
+})();

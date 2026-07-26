@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>New split tab</title>
+    <link rel="stylesheet" href="split-picker.css">
+  </head>
+  <body>
+    <main class="picker">
+      <header>
+        <div>
+          <span class="eyebrow">Helium Command Bar</span>
+          <h1>New split tab</h1>
+        </div>
+        <button id="close" type="button" title="Close split picker" aria-label="Close split picker">×</button>
+      </header>
+
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+        </svg>
+        <input
+          id="query"
+          type="text"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-controls="actions"
+          aria-autocomplete="list"
+          placeholder="Enter a URL or search…"
+          autofocus
+        >
+      </div>
+
+      <div class="section-label">Open in this split</div>
+      <ul id="actions" role="listbox" aria-label="Split tab actions"></ul>
+      <p id="error" role="alert" hidden></p>
+
+      <footer>
+        <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
+        <span><kbd>↵</kbd> open</span>
+        <span><kbd>esc</kbd> cancel</span>
+      </footer>
+    </main>
+
+    <script type="module" src="split-picker.js"></script>
+  </body>
+</html>
