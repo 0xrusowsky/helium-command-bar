@@ -57,6 +57,27 @@
 
         <p class="hint">Press <kbd>→</kbd> to enter individual tab navigation and <kbd>←</kbd> to return to the complete split group. Compact mode expands and collapses visually as you do.</p>
       </section>
+
+      <section aria-labelledby="blur-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="blur-heading">Inactive split pane</h2>
+            <p>Make the focused pane more obvious whenever you use a split view.</p>
+          </div>
+          <span id="blur-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <label class="toggle-row">
+          <span>
+            <strong>Dim the inactive split pane</strong>
+            <small>Keep the other pane softly dimmed, then strengthen it with blur while the command bar is open.</small>
+          </span>
+          <input id="blur-inactive-split" type="checkbox" role="switch">
+          <i aria-hidden="true"></i>
+        </label>
+
+        <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects a pointer-events-free visual layer. Protected browser pages cannot be dimmed or blurred.</p>
+      </section>
     </main>
 
     <script type="module" src="options.js"></script>

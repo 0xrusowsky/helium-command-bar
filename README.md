@@ -42,7 +42,8 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
-- Type **Settings** to open `helium://settings`, or **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`.
+- Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, or **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`.
+- Open Settings, Keyboard shortcuts, and Extensions tabs are omitted from the regular **Open** section. Searching for their destination shows the dedicated icon and focuses the existing tab instead of opening a duplicate.
 
 Bare domains such as `example.com`, localhost URLs, IP addresses, and explicit `http://` or `https://` URLs are opened directly. Other text is sent to the browser's default search provider.
 
@@ -75,6 +76,8 @@ The **Default split view appearance** setting controls whether splits initially 
 
 Press **Right Arrow** from either default to enter the individual rows, and **Left Arrow** to return to group selection. This navigation state is temporary for the current command-bar session. The saved default is synced through Chromium's extension storage.
 
+The optional **Dim the inactive split pane** setting keeps the unfocused pane under a soft, pointer-events-free tint. While the command bar is open, that tint becomes the stronger blur treatment. Closing the command bar returns it to the persistent soft dim, and switching pane focus moves the effect immediately. It is disabled by default and requests host access when enabled; protected browser pages remain unchanged.
+
 ## Development
 
 There is no build step. Edit the files and click the extension's reload button on `chrome://extensions`.
@@ -91,4 +94,5 @@ npm test
 - `tabs`: read open-tab titles and URLs and activate/close selected tabs.
 - `sessions`: list and restore recently closed tabs and windows.
 - `search`: query Helium's configured default search provider.
-- `storage`: sync the selected default split appearance.
+- `storage`: sync the selected split appearance and inactive-pane preference.
+- Optional `<all_urls>` host access: inject only the persistent dim/temporary blur layer into inactive split panes. This permission is requested explicitly when the setting is enabled and removed again when it is disabled.

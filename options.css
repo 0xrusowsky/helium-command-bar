@@ -74,6 +74,10 @@ section {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
 }
 
+section + section {
+  margin-top: 18px;
+}
+
 .section-heading {
   display: flex;
   align-items: flex-start;
@@ -87,7 +91,8 @@ h2 {
   font-size: 16px;
 }
 
-#save-status {
+#save-status,
+#blur-status {
   padding: 3px 8px;
   border-radius: 999px;
   opacity: 0;
@@ -98,8 +103,14 @@ h2 {
   transition: opacity 160ms ease;
 }
 
-#save-status.visible {
+#save-status.visible,
+#blur-status.visible {
   opacity: 1;
+}
+
+#blur-status.error {
+  background: rgba(190, 45, 45, 0.1);
+  color: #c94b4b;
 }
 
 fieldset {
@@ -253,6 +264,90 @@ kbd {
 .hint {
   margin-top: 16px;
   font-size: 12px;
+}
+
+.toggle-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg));
+  cursor: pointer;
+}
+
+.toggle-row > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toggle-row strong {
+  font-size: 13.5px;
+}
+
+.toggle-row small,
+.permission-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toggle-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.toggle-row i {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 18%, var(--surface));
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.toggle-row i::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+  content: "";
+  transition: transform 140ms ease;
+}
+
+.toggle-row input:checked + i {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  background: var(--accent);
+}
+
+.toggle-row input:checked + i::after {
+  transform: translateX(18px);
+}
+
+.toggle-row input:focus-visible + i {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle-row input:disabled + i {
+  opacity: 0.55;
+}
+
+.permission-note {
+  margin-top: 12px;
+  line-height: 1.5;
 }
 
 .visually-hidden {

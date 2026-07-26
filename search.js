@@ -13,14 +13,30 @@ export const SETTINGS_ENTRIES = Object.freeze([
     title: "Settings",
     url: "helium://settings",
     description: "Open Helium settings",
-    keywords: "preferences configuration browser settings"
+    keywords: "preferences configuration browser settings",
+    icon: "settings",
+    aliases: ["helium://settings", "chrome://settings"]
   }),
   Object.freeze({
     id: "keyboard-shortcuts",
     title: "Keyboard shortcuts",
     url: "helium://settings/system/shortcuts",
     description: "Customize browser keyboard shortcuts",
-    keywords: "hotkeys key bindings commands system settings"
+    keywords: "hotkeys key bindings commands system settings",
+    icon: "keyboard",
+    aliases: [
+      "helium://settings/system/shortcuts",
+      "chrome://settings/system/shortcuts"
+    ]
+  }),
+  Object.freeze({
+    id: "extensions",
+    title: "Extensions",
+    url: "helium://extensions",
+    description: "Manage browser extensions",
+    keywords: "extensions add-ons addons plugins manage installed developer mode",
+    icon: "extensions",
+    aliases: ["helium://extensions", "chrome://extensions"]
   })
 ]);
 
@@ -129,6 +145,26 @@ export function getSettingById(id) {
   return SETTINGS_ENTRIES.find((setting) => setting.id === id) || null;
 }
 
+export function getSettingForTab(tab) {
+  const url = normalize(tab?.url || tab?.pendingUrl || "").replace(/[?#].*$/, "").replace(/\/$/, "");
+  let bestMatch = null;
+  let bestLength = -1;
+
+  for (const setting of SETTINGS_ENTRIES) {
+    for (const alias of setting.aliases || [setting.url]) {
+      const normalizedAlias = normalize(alias).replace(/\/$/, "");
+      if (
+        (url === normalizedAlias || url.startsWith(`${normalizedAlias}/`)) &&
+        normalizedAlias.length > bestLength
+      ) {
+        bestMatch = setting;
+        bestLength = normalizedAlias.length;
+      }
+    }
+  }
+  return bestMatch;
+}
+
 export function filterTabs(tabs, query) {
   const normalizedQuery = normalize(query);
   const scored = tabs
@@ -220,13 +256,14 @@ export function isIgnoredRecentlyClosedTab(tab) {
     .replace(/\s+/g, " ");
   const url = normalize(tab?.url || tab?.pendingUrl || "");
 
-  const isSettingsPage = /^(?:helium|chrome):\/\/settings(?:\/|$)/.test(url);
+  const isSettingsPage = /^(?:helium|chrome):\/\/(?:settings|extensions)(?:\/|$)/.test(url);
   const isNewTabPage = /^(?:helium|chrome):\/\/(?:newtab|new-tab)(?:\/|$)/.test(url) ||
     url === "about:newtab";
   const isNewSplitPage = url.includes("tab-search.top-chrome/split_new_tab_page.html") ||
     /\/split-picker\.html(?:[?#]|$)/.test(url);
   const isSettingsTitle = title === "settings" ||
     title === "keyboard shortcuts" ||
+    title === "extensions" ||
     /^settings\s*-\s*keyboard shortcuts$/.test(title);
   const isPlaceholderTitle = title === "new tab" || title === "new split tab";
 

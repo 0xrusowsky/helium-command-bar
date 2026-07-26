@@ -2,7 +2,7 @@
   const rootId = `helium-command-bar-${chrome.runtime.id}`;
   const existing = document.getElementById(rootId);
   if (existing) {
-    existing.remove();
+    existing.dispatchEvent(new CustomEvent("helium-command-bar:request-close"));
     return;
   }
 
@@ -131,8 +131,14 @@
   }
 
   function closeCommandBar() {
+    void chrome.runtime.sendMessage({
+      type: "helium-command-bar:close-overlay",
+      blurredPartnerIds: initial.blurredPartnerIds || []
+    }).catch(() => {});
     root.remove();
   }
+
+  root.addEventListener("helium-command-bar:request-close", closeCommandBar, { once: true });
 
   function hostnameFor(item) {
     const value = item.url || item.pendingUrl || "";
@@ -321,22 +327,33 @@
     return rowElement;
   }
 
+  function settingIconPath(setting) {
+    if (setting.icon === "keyboard") {
+      return "M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
+    }
+    if (setting.icon === "extensions") {
+      return "M8 3h3v2a2 2 0 1 0 2 0V3h3a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 2h2v3a2 2 0 0 1-2 2h-3v-2a2 2 0 1 0-2 0v2H8a2 2 0 0 1-2-2v-3H4a2 2 0 1 1 0-2h2V5a2 2 0 0 1 2-2Z";
+    }
+    return "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4";
+  }
+
   function makeSettingRow(row, index) {
     const { setting } = row;
     const rowElement = element("li", "result-row setting-row");
     rowElement.id = `result-${index}`;
     rowElement.setAttribute("role", "option");
 
-    const iconBox = element("span", "setting-icon-box");
-    iconBox.append(svgIcon(
-      "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4",
-      "setting-icon"
-    ));
+    const iconBox = element("span", `setting-icon-box ${setting.icon || "settings"}`);
+    iconBox.append(svgIcon(settingIconPath(setting), "setting-icon"));
 
     const details = element("span", "result-details");
     details.append(
       element("span", "result-title", setting.title),
-      element("span", "result-subtitle", `${setting.description} · Helium settings`)
+      element(
+        "span",
+        "result-subtitle",
+        row.tab ? `${setting.description} · Open tab` : `${setting.description} · Helium`
+      )
     );
     rowElement.append(iconBox, details, element("kbd", "enter-hint", "↵"));
     return rowElement;
@@ -525,7 +542,8 @@
     } else if (item.row.kind === "setting") {
       await sendAction({
         type: "helium-command-bar:open-setting",
-        settingId: item.row.setting.id
+        settingId: item.row.setting.id,
+        tabId: item.row.tab?.id
       });
     } else {
       await openInput();
@@ -604,7 +622,9 @@
       const item = navigationItems[selectedIndex];
       const tab = item?.kind === "split-member"
         ? item.row.tab
-        : item?.kind === "row" && item.row.kind === "tab" ? item.row.tab : null;
+        : item?.kind === "row" && item.row.kind === "tab"
+          ? item.row.tab
+          : null;
       if (tab) {
         event.preventDefault();
         await closeTab(tab.id);

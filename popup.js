@@ -2,6 +2,7 @@ import {
   filterRecentlyClosed,
   filterSettings,
   filterTabBlocks,
+  getSettingForTab,
   hostnameFor,
   resolveInput
 } from "./search.js";
@@ -48,10 +49,19 @@ function launchRow(input) {
 
 function updateRows({ resetSelection = false } = {}) {
   const input = queryInput.value;
-  const matchedBlocks = filterTabBlocks(allTabs, input, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
+  const regularTabs = allTabs.filter((tab) => !getSettingForTab(tab));
+  const matchedBlocks = filterTabBlocks(regularTabs, input, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
   const matchedClosed = filterRecentlyClosed(recentlyClosedSessions, input);
   const matchedSettings = filterSettings(input);
   const launch = launchRow(input);
+  const openSettingTabs = new Map();
+  for (const tab of [...allTabs].sort((left, right) =>
+    Number(Boolean(right.active)) - Number(Boolean(left.active)) ||
+    (right.lastAccessed || 0) - (left.lastAccessed || 0)
+  )) {
+    const setting = getSettingForTab(tab);
+    if (setting && !openSettingTabs.has(setting.id)) openSettingTabs.set(setting.id, tab);
+  }
   const openRows = matchedBlocks.flatMap((block) => block.type === "split"
     ? block.members.map((tab) => ({
         kind: "split-member",
@@ -63,7 +73,11 @@ function updateRows({ resetSelection = false } = {}) {
     : [{ kind: "tab", tab: block.members[0] }]);
   rows = [
     ...(launch ? [launch] : []),
-    ...matchedSettings.map((setting) => ({ kind: "setting", setting })),
+    ...matchedSettings.map((setting) => ({
+      kind: "setting",
+      setting,
+      tab: openSettingTabs.get(setting.id) || null
+    })),
     ...openRows,
     ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
   ];
@@ -299,6 +313,16 @@ function makeClosedRow(row, index) {
   return element;
 }
 
+function settingIconPath(setting) {
+  if (setting.icon === "keyboard") {
+    return "M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
+  }
+  if (setting.icon === "extensions") {
+    return "M8 3h3v2a2 2 0 1 0 2 0V3h3a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 2h2v3a2 2 0 0 1-2 2h-3v-2a2 2 0 1 0-2 0v2H8a2 2 0 0 1-2-2v-3H4a2 2 0 1 1 0-2h2V5a2 2 0 0 1 2-2Z";
+  }
+  return "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4";
+}
+
 function makeSettingRow(row, index) {
   const { setting } = row;
   const element = document.createElement("li");
@@ -307,11 +331,8 @@ function makeSettingRow(row, index) {
   element.setAttribute("role", "option");
 
   const iconBox = document.createElement("span");
-  iconBox.className = "setting-icon-box";
-  iconBox.append(createSvgIcon(
-    "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4",
-    "setting-icon"
-  ));
+  iconBox.className = `setting-icon-box ${setting.icon || "settings"}`;
+  iconBox.append(createSvgIcon(settingIconPath(setting), "setting-icon"));
 
   const details = document.createElement("span");
   details.className = "result-details";
@@ -320,7 +341,9 @@ function makeSettingRow(row, index) {
   title.textContent = setting.title;
   const subtitle = document.createElement("span");
   subtitle.className = "result-subtitle";
-  subtitle.textContent = `${setting.description} · Helium settings`;
+  subtitle.textContent = row.tab
+    ? `${setting.description} · Open tab`
+    : `${setting.description} · Helium`;
   details.append(title, subtitle);
 
   const enterHint = document.createElement("kbd");
@@ -502,12 +525,15 @@ async function openInput(target = resolveInput(queryInput.value)) {
   }
 }
 
-async function openSetting(setting) {
+async function openSetting(setting, tab = null) {
   try {
-    await chrome.tabs.create({ url: setting.url, active: true });
-    closeCommandBar();
+    if (tab) await activateTab(tab);
+    else {
+      await chrome.tabs.create({ url: setting.url, active: true });
+      closeCommandBar();
+    }
   } catch (error) {
-    console.error("Could not open settings destination", error);
+    console.error("Could not open browser destination", error);
   }
 }
 
@@ -524,7 +550,7 @@ async function activateNavigationItem(index = selectedIndex) {
   } else if (item.row.kind === "closed") {
     await restoreSession(item.row.closed);
   } else if (item.row.kind === "setting") {
-    await openSetting(item.row.setting);
+    await openSetting(item.row.setting, item.row.tab);
   } else {
     await openInput(item.row.target);
   }
@@ -615,7 +641,9 @@ queryInput.addEventListener("keydown", async (event) => {
     const item = navigationItems[selectedIndex];
     const tab = item?.kind === "split-member"
       ? item.row.tab
-      : item?.kind === "row" && item.row.kind === "tab" ? item.row.tab : null;
+      : item?.kind === "row" && item.row.kind === "tab"
+        ? item.row.tab
+        : null;
     if (tab) {
       event.preventDefault();
       await closeTab(tab.id);

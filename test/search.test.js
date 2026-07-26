@@ -8,6 +8,7 @@ import {
   filterTabBlocks,
   filterTabs,
   getSettingById,
+  getSettingForTab,
   isIgnoredRecentlyClosedTab,
   isSplitTab,
   normalize,
@@ -58,9 +59,21 @@ test("finds Helium settings destinations by title and keywords", () => {
   assert.equal(shortcuts.url, "helium://settings/system/shortcuts");
   assert.equal(filterSettings("hotkeys")[0].id, "keyboard-shortcuts");
   assert.equal(filterSettings("settings")[0].url, "helium://settings");
+  assert.equal(filterSettings("extensions")[0].url, "helium://extensions");
+  assert.equal(filterSettings("plugins")[0].id, "extensions");
   assert.deepEqual(filterSettings(""), []);
   assert.equal(getSettingById("keyboard-shortcuts"), shortcuts);
   assert.equal(getSettingById("missing"), null);
+});
+
+test("recognizes open internal destinations with their most specific behavior", () => {
+  assert.equal(getSettingForTab({ url: "helium://settings" }).id, "settings");
+  assert.equal(
+    getSettingForTab({ url: "helium://settings/system/shortcuts" }).id,
+    "keyboard-shortcuts"
+  );
+  assert.equal(getSettingForTab({ url: "chrome://extensions/?id=abc" }).id, "extensions");
+  assert.equal(getSettingForTab({ url: "https://example.com/extensions" }), null);
 });
 
 test("sorts empty queries by recent access", () => {
@@ -108,6 +121,7 @@ test("filters built-in settings and placeholder tabs from recently closed", () =
     { title: "Settings – Keyboard shortcuts", url: "helium://settings/system/shortcuts" },
     { title: "Keyboard shortcuts", url: "helium://settings/system/shortcuts" },
     { title: "Settings", url: "helium://settings" },
+    { title: "Extensions", url: "chrome://extensions/" },
     { title: "New Tab", url: "chrome://newtab/" },
     { title: "New split tab", url: "chrome://tab-search.top-chrome/split_new_tab_page.html" },
     { title: "New split tab", url: "chrome-extension://extension-id/split-picker.html" }
