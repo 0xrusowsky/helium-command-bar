@@ -1,11 +1,22 @@
 import {
+  attachBookmarkMetadata,
+  bookmarkUrlKey,
+  bookmarksInFolders,
+  displayTabTitle,
+  filterBookmarks,
   filterRecentlyClosed,
   filterSettings,
+  filterTabActions,
   filterTabBlocks,
+  flattenBookmarks,
   getSettingForTab,
   hostnameFor,
   resolveInput
 } from "./search.js";
+import {
+  DEFAULT_COMMAND_BAR_COLOR,
+  applyCommandBarTheme
+} from "./theme.js";
 
 const queryInput = document.querySelector("#query");
 const resultsElement = document.querySelector("#results");
@@ -17,11 +28,16 @@ function closeCommandBar() {
 }
 
 let allTabs = [];
+let invokingTabId = null;
+let allBookmarks = [];
 let recentlyClosedSessions = [];
 let rows = [];
 let navigationItems = [];
 let selectedIndex = 0;
 let defaultSplitExpanded = false;
+let showFavorites = true;
+let showRecentlyClosed = true;
+let favoriteFolderIds = null;
 const splitNavigationKeys = new Set();
 
 function isSplitVisuallyExpanded(splitKey) {
@@ -47,12 +63,34 @@ function launchRow(input) {
   return { kind: "launch", target };
 }
 
+function bookmarkWithFavicon(bookmark) {
+  const url = new URL(chrome.runtime.getURL("/_favicon/"));
+  url.searchParams.set("pageUrl", bookmark.url);
+  url.searchParams.set("size", "32");
+  return { ...bookmark, favIconUrl: url.href };
+}
+
 function updateRows({ resetSelection = false } = {}) {
   const input = queryInput.value;
-  const regularTabs = allTabs.filter((tab) => !getSettingForTab(tab));
+  const configuredBookmarks = bookmarksInFolders(allBookmarks, favoriteFolderIds);
+  const enabledBookmarks = showFavorites ? configuredBookmarks : [];
+  const regularTabs = attachBookmarkMetadata(
+    allTabs.filter((tab) => tab.id !== invokingTabId && !getSettingForTab(tab)),
+    enabledBookmarks
+  );
   const matchedBlocks = filterTabBlocks(regularTabs, input, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
-  const matchedClosed = filterRecentlyClosed(recentlyClosedSessions, input);
+  const matchedClosed = showRecentlyClosed
+    ? filterRecentlyClosed(recentlyClosedSessions, input)
+    : [];
+  const matchedBookmarks = showFavorites
+    ? filterBookmarks(allBookmarks, input, allTabs, favoriteFolderIds)
+    : [];
   const matchedSettings = filterSettings(input);
+  const currentRawTab = allTabs.find((tab) => tab.id === invokingTabId) || null;
+  const currentTab = currentRawTab
+    ? attachBookmarkMetadata([currentRawTab], configuredBookmarks)[0]
+    : null;
+  const matchedTabActions = filterTabActions(input, currentTab);
   const launch = launchRow(input);
   const openSettingTabs = new Map();
   for (const tab of [...allTabs].sort((left, right) =>
@@ -78,19 +116,28 @@ function updateRows({ resetSelection = false } = {}) {
       setting,
       tab: openSettingTabs.get(setting.id) || null
     })),
+    ...matchedTabActions.map((action) => ({
+      kind: "tab-action",
+      action,
+      tabId: currentTab.id
+    })),
     ...openRows,
+    ...matchedBookmarks.map((bookmark) => ({
+      kind: "bookmark",
+      bookmark: bookmarkWithFavicon(bookmark)
+    })),
     ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
   ];
 
   if (resetSelection) selectedIndex = 0;
 
-  const totalMatches = matchedSettings.length + openRows.length + matchedClosed.length;
+  const totalMatches = matchedSettings.length + matchedTabActions.length + openRows.length + matchedBookmarks.length + matchedClosed.length;
   if (!input.trim()) {
-    resultLabel.textContent = `${openRows.length} open · ${matchedClosed.length} recently closed`;
+    resultLabel.textContent = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
   } else if (totalMatches === 0) {
     resultLabel.textContent = "No matching tabs";
   } else {
-    resultLabel.textContent = `${openRows.length} open · ${matchedClosed.length} recently closed`;
+    resultLabel.textContent = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
   }
 
   emptyElement.hidden = rows.length !== 0;
@@ -114,6 +161,7 @@ function setSelected(index, { scroll = true } = {}) {
 
 function makeTabRow(row, index) {
   const { tab } = row;
+  const displayTitle = displayTabTitle(tab) || "Untitled tab";
   const element = document.createElement("li");
   element.className = `result-row tab-row${row.kind === "split-member" ? " split-member-row" : ""}`;
   element.id = `result-${index}`;
@@ -123,7 +171,7 @@ function makeTabRow(row, index) {
   iconBox.className = "favicon-box";
   const fallback = document.createElement("span");
   fallback.className = "favicon-fallback";
-  fallback.textContent = (tab.title || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
+  fallback.textContent = (displayTitle || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
   if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
@@ -141,7 +189,7 @@ function makeTabRow(row, index) {
   details.className = "result-details";
   const title = document.createElement("span");
   title.className = "result-title";
-  title.textContent = tab.title || "Untitled tab";
+  title.textContent = displayTitle;
   const subtitle = document.createElement("span");
   subtitle.className = "result-subtitle";
   subtitle.textContent = hostnameFor(tab);
@@ -155,11 +203,33 @@ function makeTabRow(row, index) {
     current.textContent = "Active";
     trailing.append(current);
   }
+  if (tab.bookmarkId) {
+    const favorite = document.createElement("span");
+    favorite.className = "favorite-tab-indicator";
+    favorite.title = "Favorite";
+    favorite.setAttribute("aria-label", "Favorite");
+    favorite.append(createSvgIcon(
+      "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z",
+      "favorite-tab-icon"
+    ));
+    trailing.append(favorite);
+  }
+  if (tab.pinned) {
+    const pinned = document.createElement("span");
+    pinned.className = "pinned-tab-indicator";
+    pinned.title = "Pinned tab";
+    pinned.setAttribute("aria-label", "Pinned tab");
+    pinned.append(createSvgIcon(
+      "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+      "pinned-tab-icon"
+    ));
+    trailing.append(pinned);
+  }
 
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "close-tab";
-  closeButton.setAttribute("aria-label", `Close ${tab.title || "tab"}`);
+  closeButton.setAttribute("aria-label", `Close ${displayTitle}`);
   closeButton.title = "Close tab";
   closeButton.textContent = "×";
   closeButton.addEventListener("click", async (event) => {
@@ -167,6 +237,10 @@ function makeTabRow(row, index) {
     await closeTab(tab.id);
   });
   trailing.append(closeButton);
+  const enterHint = document.createElement("kbd");
+  enterHint.className = "tab-enter-hint";
+  enterHint.textContent = "↵";
+  trailing.append(enterHint);
 
   element.append(iconBox, details, trailing);
   return element;
@@ -205,7 +279,7 @@ function makeCompactFavicon(tab) {
   const iconBox = document.createElement("span");
   iconBox.className = "compact-favicon-box";
   const fallback = document.createElement("span");
-  fallback.textContent = (tab.title || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
+  fallback.textContent = (displayTabTitle(tab) || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
   if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
@@ -235,20 +309,41 @@ function makeCollapsedSplit(memberRows, index) {
   columns.className = "split-columns";
   memberRows.forEach((memberRow) => {
     const { tab } = memberRow;
+    const displayTitle = displayTabTitle(tab) || "Untitled tab";
     const column = document.createElement("button");
     column.type = "button";
     column.className = "split-column";
-    column.title = `Open split and focus ${tab.title || "tab"}`;
+    column.title = `Open split and focus ${displayTitle}`;
     const details = document.createElement("span");
     details.className = "split-column-details";
     const title = document.createElement("span");
     title.className = "split-column-title";
-    title.textContent = tab.title || "Untitled tab";
+    title.textContent = displayTitle;
     const subtitle = document.createElement("span");
     subtitle.className = "split-column-subtitle";
     subtitle.textContent = hostnameFor(tab);
     details.append(title, subtitle);
     column.append(makeCompactFavicon(tab), details);
+    if (tab.bookmarkId) {
+      const favorite = document.createElement("span");
+      favorite.className = "favorite-tab-indicator";
+      favorite.title = "Favorite";
+      favorite.append(createSvgIcon(
+        "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z",
+        "favorite-tab-icon"
+      ));
+      column.append(favorite);
+    }
+    if (tab.pinned) {
+      const pinned = document.createElement("span");
+      pinned.className = "pinned-tab-indicator";
+      pinned.title = "Pinned tab";
+      pinned.append(createSvgIcon(
+        "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+        "pinned-tab-icon"
+      ));
+      column.append(pinned);
+    }
     column.addEventListener("click", async (event) => {
       event.stopPropagation();
       await activateTab(tab);
@@ -263,6 +358,51 @@ function makeCollapsedSplit(memberRows, index) {
   option.append(columns, hint);
   group.append(option);
   return { group, option };
+}
+
+function makeBookmarkRow(row, index) {
+  const { bookmark } = row;
+  const element = document.createElement("li");
+  element.className = "result-row bookmark-row";
+  element.id = `result-${index}`;
+  element.setAttribute("role", "option");
+
+  const iconBox = document.createElement("span");
+  iconBox.className = "favicon-box favorite-favicon-box";
+  const fallback = document.createElement("span");
+  fallback.className = "favicon-fallback";
+  fallback.textContent = (bookmark.title || hostnameFor(bookmark) || "B").trim().charAt(0).toLocaleUpperCase();
+  iconBox.append(fallback);
+
+  if (bookmark.favIconUrl) {
+    const favicon = document.createElement("img");
+    favicon.className = "favicon";
+    favicon.src = bookmark.favIconUrl;
+    favicon.alt = "";
+    favicon.referrerPolicy = "no-referrer";
+    favicon.addEventListener("load", () => fallback.remove());
+    favicon.addEventListener("error", () => favicon.remove());
+    iconBox.append(favicon);
+  }
+
+  const details = document.createElement("span");
+  details.className = "result-details";
+  const title = document.createElement("span");
+  title.className = "result-title";
+  title.textContent = bookmark.title || "Untitled bookmark";
+  const subtitle = document.createElement("span");
+  subtitle.className = "result-subtitle";
+  const location = hostnameFor(bookmark);
+  subtitle.textContent = bookmark.folder
+    ? `${location} · ${bookmark.folder}`
+    : location;
+  details.append(title, subtitle);
+
+  const enterHint = document.createElement("kbd");
+  enterHint.className = "enter-hint";
+  enterHint.textContent = "↵";
+  element.append(iconBox, details, enterHint);
+  return element;
 }
 
 function makeClosedRow(row, index) {
@@ -313,14 +453,50 @@ function makeClosedRow(row, index) {
   return element;
 }
 
+function makeTabActionRow(row, index) {
+  const { action } = row;
+  const element = document.createElement("li");
+  element.className = "result-row tab-action-row";
+  element.id = `result-${index}`;
+  element.setAttribute("role", "option");
+
+  const iconBox = document.createElement("span");
+  iconBox.className = `tab-action-icon-box ${action.icon}`;
+  iconBox.append(createSvgIcon(
+    action.icon === "favorite"
+      ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
+      : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+    action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
+  ));
+
+  const details = document.createElement("span");
+  details.className = "result-details";
+  const title = document.createElement("span");
+  title.className = "result-title";
+  title.textContent = action.title;
+  const subtitle = document.createElement("span");
+  subtitle.className = "result-subtitle";
+  subtitle.textContent = action.description;
+  details.append(title, subtitle);
+
+  const enterHint = document.createElement("kbd");
+  enterHint.className = "enter-hint";
+  enterHint.textContent = "↵";
+  element.append(iconBox, details, enterHint);
+  return element;
+}
+
 function settingIconPath(setting) {
   if (setting.icon === "keyboard") {
-    return "M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
+    return "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
   }
   if (setting.icon === "extensions") {
-    return "M8 3h3v2a2 2 0 1 0 2 0V3h3a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 2h2v3a2 2 0 0 1-2 2h-3v-2a2 2 0 1 0-2 0v2H8a2 2 0 0 1-2-2v-3H4a2 2 0 1 1 0-2h2V5a2 2 0 0 1 2-2Z";
+    return "M8.5 3H5a2 2 0 0 0-2 2v3.5h1.5a2.5 2.5 0 1 1 0 5H3V17a2 2 0 0 0 2 2h3.5v-1.5a2.5 2.5 0 1 1 5 0V19H17a2 2 0 0 0 2-2v-3.5h1.5a2.5 2.5 0 1 0 0-5H19V5a2 2 0 0 0-2-2h-3.5v1.5a2.5 2.5 0 1 1-5 0V3Z";
   }
-  return "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4";
+  if (setting.icon === "bookmarks") {
+    return "M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4Z";
+  }
+  return "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Zm-.22 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z";
 }
 
 function makeSettingRow(row, index) {
@@ -417,6 +593,7 @@ function renderRows() {
   const sections = {
     search: makeResultSection("Search"),
     open: makeResultSection("Open"),
+    favorites: makeResultSection("Bookmarks"),
     closed: makeResultSection("Recently closed")
   };
   navigationItems = [];
@@ -466,12 +643,16 @@ function renderRows() {
 
     let element;
     if (row.kind === "tab") element = makeTabRow(row, navigationItems.length);
+    else if (row.kind === "bookmark") element = makeBookmarkRow(row, navigationItems.length);
     else if (row.kind === "closed") element = makeClosedRow(row, navigationItems.length);
     else if (row.kind === "setting") element = makeSettingRow(row, navigationItems.length);
+    else if (row.kind === "tab-action") element = makeTabActionRow(row, navigationItems.length);
     else element = makeLaunchRow(row, navigationItems.length);
-    const section = row.kind === "launch" || row.kind === "setting"
+    const section = row.kind === "launch" || row.kind === "setting" || row.kind === "tab-action"
       ? sections.search
-      : row.kind === "closed" ? sections.closed : sections.open;
+      : row.kind === "bookmark"
+        ? sections.favorites
+        : row.kind === "closed" ? sections.closed : sections.open;
     section.list.append(bindNavigationItem(element, { kind: "row", row }));
     rowIndex += 1;
   }
@@ -486,8 +667,12 @@ function renderRows() {
 
 async function activateTab(tab) {
   try {
-    await chrome.windows.update(tab.windowId, { focused: true });
-    await chrome.tabs.update(tab.id, { active: true });
+    const response = await chrome.runtime.sendMessage({
+      type: "helium-command-bar:activate-tab",
+      tabId: tab.id,
+      windowId: tab.windowId
+    });
+    if (!response?.ok) throw new Error("The browser did not activate the tab");
     closeCommandBar();
   } catch (error) {
     console.error("Could not activate tab", error);
@@ -525,6 +710,44 @@ async function openInput(target = resolveInput(queryInput.value)) {
   }
 }
 
+async function runTabAction(row) {
+  try {
+    const message = row.action.id === "toggle-favorite"
+      ? {
+          type: "helium-command-bar:set-favorite",
+          tabId: row.tabId,
+          favorite: row.action.nextFavorite,
+          bookmarkId: row.action.bookmarkId
+        }
+      : {
+          type: "helium-command-bar:set-pinned",
+          tabId: row.tabId,
+          pinned: row.action.nextPinned
+        };
+    const response = await chrome.runtime.sendMessage(message);
+    if (!response?.ok) throw new Error("The browser did not update the tab");
+    closeCommandBar();
+  } catch (error) {
+    console.error("Could not run tab action", error);
+  }
+}
+
+async function openBookmark(bookmark) {
+  try {
+    const bookmarkKey = bookmarkUrlKey(bookmark.url);
+    const existingTab = (await chrome.tabs.query({})).find((tab) =>
+      bookmarkUrlKey(tab.url || tab.pendingUrl || "") === bookmarkKey
+    );
+    if (existingTab) await activateTab(existingTab);
+    else {
+      await chrome.tabs.create({ url: bookmark.url, active: true });
+      closeCommandBar();
+    }
+  } catch (error) {
+    console.error("Could not open bookmark", error);
+  }
+}
+
 async function openSetting(setting, tab = null) {
   try {
     if (tab) await activateTab(tab);
@@ -547,10 +770,14 @@ async function activateNavigationItem(index = selectedIndex) {
     await activateTab(item.row.tab);
   } else if (item.row.kind === "tab") {
     await activateTab(item.row.tab);
+  } else if (item.row.kind === "bookmark") {
+    await openBookmark(item.row.bookmark);
   } else if (item.row.kind === "closed") {
     await restoreSession(item.row.closed);
   } else if (item.row.kind === "setting") {
     await openSetting(item.row.setting, item.row.tab);
+  } else if (item.row.kind === "tab-action") {
+    await runTabAction(item.row);
   } else {
     await openInput(item.row.target);
   }
@@ -588,13 +815,33 @@ async function closeTab(tabId) {
 
 async function loadTabs() {
   try {
-    allTabs = await chrome.tabs.query({});
+    const [tabs, activeTabs] = await Promise.all([
+      chrome.tabs.query({}),
+      chrome.tabs.query({ active: true, currentWindow: true })
+    ]);
+    allTabs = tabs;
+    invokingTabId = activeTabs[0]?.id ?? null;
     updateRows();
   } catch (error) {
     resultLabel.textContent = "Unable to read tabs";
     emptyElement.textContent = "Reload the extension and try again";
     emptyElement.hidden = false;
     console.error("Could not query tabs", error);
+  }
+}
+
+async function loadBookmarks() {
+  try {
+    if (!chrome.bookmarks) {
+      allBookmarks = [];
+      updateRows();
+      return;
+    }
+    allBookmarks = flattenBookmarks(await chrome.bookmarks.getTree());
+    updateRows();
+  } catch (error) {
+    allBookmarks = [];
+    console.error("Could not query bookmarks", error);
   }
 }
 
@@ -665,15 +912,53 @@ chrome.tabs.onUpdated.addListener((tabId, _changeInfo, tab) => {
     updateRows();
   }
 });
-chrome.sessions.onChanged.addListener(loadRecentlyClosed);
+chrome.sessions?.onChanged?.addListener(loadRecentlyClosed);
+if (chrome.bookmarks) {
+  for (const event of [
+    chrome.bookmarks.onCreated,
+    chrome.bookmarks.onRemoved,
+    chrome.bookmarks.onChanged,
+    chrome.bookmarks.onMoved,
+    chrome.bookmarks.onChildrenReordered,
+    chrome.bookmarks.onImportEnded
+  ].filter(Boolean)) {
+    event.addListener(loadBookmarks);
+  }
+}
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync" || !changes.defaultSplitMode) return;
-  defaultSplitExpanded = changes.defaultSplitMode.newValue === "expanded";
-  splitNavigationKeys.clear();
-  renderRows();
+  if (areaName !== "sync") return;
+  if (changes.commandBarColor) {
+    applyCommandBarTheme(document, changes.commandBarColor.newValue);
+  }
+  if (changes.defaultSplitMode) {
+    defaultSplitExpanded = changes.defaultSplitMode.newValue === "expanded";
+    splitNavigationKeys.clear();
+  }
+  if (changes.showFavorites) showFavorites = changes.showFavorites.newValue !== false;
+  if (changes.showRecentlyClosed) {
+    showRecentlyClosed = changes.showRecentlyClosed.newValue !== false;
+  }
+  if (changes.favoriteFolderIds) {
+    favoriteFolderIds = Array.isArray(changes.favoriteFolderIds.newValue)
+      ? changes.favoriteFolderIds.newValue
+      : null;
+  }
+  updateRows();
 });
 
-const storedSettings = await chrome.storage.sync.get({ defaultSplitMode: "compact" });
+const storedSettings = await chrome.storage.sync.get({
+  defaultSplitMode: "compact",
+  commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
+  showFavorites: true,
+  showRecentlyClosed: true,
+  favoriteFolderIds: null
+});
+applyCommandBarTheme(document, storedSettings.commandBarColor);
 defaultSplitExpanded = storedSettings.defaultSplitMode === "expanded";
-await Promise.all([loadTabs(), loadRecentlyClosed()]);
+showFavorites = storedSettings.showFavorites !== false;
+showRecentlyClosed = storedSettings.showRecentlyClosed !== false;
+favoriteFolderIds = Array.isArray(storedSettings.favoriteFolderIds)
+  ? storedSettings.favoriteFolderIds
+  : null;
+await Promise.all([loadTabs(), loadBookmarks(), loadRecentlyClosed()]);
 queryInput.focus();

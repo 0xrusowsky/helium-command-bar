@@ -203,6 +203,26 @@
 
     const trailing = element("span", "row-trailing");
     if (tab.active) trailing.append(element("span", "current-pill", "Active"));
+    if (tab.bookmarkId) {
+      const favorite = element("span", "favorite-tab-indicator");
+      favorite.title = "Favorite";
+      favorite.setAttribute("aria-label", "Favorite");
+      favorite.append(svgIcon(
+        "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z",
+        "favorite-tab-icon"
+      ));
+      trailing.append(favorite);
+    }
+    if (tab.pinned) {
+      const pinned = element("span", "pinned-tab-indicator");
+      pinned.title = "Pinned tab";
+      pinned.setAttribute("aria-label", "Pinned tab");
+      pinned.append(svgIcon(
+        "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+        "pinned-tab-icon"
+      ));
+      trailing.append(pinned);
+    }
 
     const closeButton = element("button", "close-tab", "×");
     closeButton.type = "button";
@@ -212,7 +232,7 @@
       event.stopPropagation();
       await closeTab(tab.id);
     });
-    trailing.append(closeButton);
+    trailing.append(closeButton, element("kbd", "tab-enter-hint", "↵"));
     rowElement.append(makeFaviconBox(tab), details, trailing);
     return rowElement;
   }
@@ -288,6 +308,24 @@
         element("span", "split-column-subtitle", hostnameFor(tab))
       );
       column.append(makeCompactFavicon(tab), details);
+      if (tab.bookmarkId) {
+        const favorite = element("span", "favorite-tab-indicator");
+        favorite.title = "Favorite";
+        favorite.append(svgIcon(
+          "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z",
+          "favorite-tab-icon"
+        ));
+        column.append(favorite);
+      }
+      if (tab.pinned) {
+        const pinned = element("span", "pinned-tab-indicator");
+        pinned.title = "Pinned tab";
+        pinned.append(svgIcon(
+          "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+          "pinned-tab-icon"
+        ));
+        column.append(pinned);
+      }
       column.addEventListener("click", async (event) => {
         event.stopPropagation();
         await activateTab(tab);
@@ -300,6 +338,27 @@
     option.append(columns, hint);
     group.append(option);
     return { group, option };
+  }
+
+  function makeBookmarkRow(row, index) {
+    const { bookmark } = row;
+    const rowElement = element("li", "result-row bookmark-row");
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const iconBox = makeFaviconBox(bookmark, "favorite-favicon-box");
+    const location = hostnameFor(bookmark);
+    const details = element("span", "result-details");
+    details.append(
+      element("span", "result-title", bookmark.title || "Untitled bookmark"),
+      element(
+        "span",
+        "result-subtitle",
+        bookmark.folder ? `${location} · ${bookmark.folder}` : location
+      )
+    );
+    rowElement.append(iconBox, details, element("kbd", "enter-hint", "↵"));
+    return rowElement;
   }
 
   function makeClosedRow(row, index) {
@@ -327,14 +386,40 @@
     return rowElement;
   }
 
+  function makeTabActionRow(row, index) {
+    const { action } = row;
+    const rowElement = element("li", "result-row tab-action-row");
+    rowElement.id = `result-${index}`;
+    rowElement.setAttribute("role", "option");
+
+    const iconBox = element("span", `tab-action-icon-box ${action.icon}`);
+    iconBox.append(svgIcon(
+      action.icon === "favorite"
+        ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
+        : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+      action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
+    ));
+
+    const details = element("span", "result-details");
+    details.append(
+      element("span", "result-title", action.title),
+      element("span", "result-subtitle", action.description)
+    );
+    rowElement.append(iconBox, details, element("kbd", "enter-hint", "↵"));
+    return rowElement;
+  }
+
   function settingIconPath(setting) {
     if (setting.icon === "keyboard") {
-      return "M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
+      return "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm3 4h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10";
     }
     if (setting.icon === "extensions") {
-      return "M8 3h3v2a2 2 0 1 0 2 0V3h3a2 2 0 0 1 2 2v3h-2a2 2 0 1 0 0 2h2v3a2 2 0 0 1-2 2h-3v-2a2 2 0 1 0-2 0v2H8a2 2 0 0 1-2-2v-3H4a2 2 0 1 1 0-2h2V5a2 2 0 0 1 2-2Z";
+      return "M8.5 3H5a2 2 0 0 0-2 2v3.5h1.5a2.5 2.5 0 1 1 0 5H3V17a2 2 0 0 0 2 2h3.5v-1.5a2.5 2.5 0 1 1 5 0V19H17a2 2 0 0 0 2-2v-3.5h1.5a2.5 2.5 0 1 0 0-5H19V5a2 2 0 0 0-2-2h-3.5v1.5a2.5 2.5 0 1 1-5 0V3Z";
     }
-    return "M8 7V4m0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0 4v9m8-3v3m0-3a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0-4V4";
+    if (setting.icon === "bookmarks") {
+      return "M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4Z";
+    }
+    return "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Zm-.22 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z";
   }
 
   function makeSettingRow(row, index) {
@@ -419,6 +504,7 @@
     const sections = {
       search: makeResultSection("Search"),
       open: makeResultSection("Open"),
+      favorites: makeResultSection("Bookmarks"),
       closed: makeResultSection("Recently closed")
     };
     navigationItems = [];
@@ -468,12 +554,16 @@
 
       let rowElement;
       if (row.kind === "tab") rowElement = makeTabRow(row, navigationItems.length);
+      else if (row.kind === "bookmark") rowElement = makeBookmarkRow(row, navigationItems.length);
       else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
       else if (row.kind === "setting") rowElement = makeSettingRow(row, navigationItems.length);
+      else if (row.kind === "tab-action") rowElement = makeTabActionRow(row, navigationItems.length);
       else rowElement = makeLaunchRow(row, navigationItems.length);
-      const section = row.kind === "launch" || row.kind === "setting"
+      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "tab-action"
         ? sections.search
-        : row.kind === "closed" ? sections.closed : sections.open;
+        : row.kind === "bookmark"
+          ? sections.favorites
+          : row.kind === "closed" ? sections.closed : sections.open;
       section.list.append(bindNavigationItem(rowElement, { kind: "row", row }));
       rowIndex += 1;
     }
@@ -534,6 +624,11 @@
       await activateTab(item.row.tab);
     } else if (item.row.kind === "tab") {
       await activateTab(item.row.tab);
+    } else if (item.row.kind === "bookmark") {
+      await sendAction({
+        type: "helium-command-bar:open-bookmark",
+        bookmarkId: item.row.bookmark.id
+      });
     } else if (item.row.kind === "closed") {
       await sendAction({
         type: "helium-command-bar:restore-session",
@@ -545,6 +640,20 @@
         settingId: item.row.setting.id,
         tabId: item.row.tab?.id
       });
+    } else if (item.row.kind === "tab-action") {
+      const action = item.row.action;
+      await sendAction(action.id === "toggle-favorite"
+        ? {
+            type: "helium-command-bar:set-favorite",
+            tabId: item.row.tabId,
+            favorite: action.nextFavorite,
+            bookmarkId: action.bookmarkId
+          }
+        : {
+            type: "helium-command-bar:set-pinned",
+            tabId: item.row.tabId,
+            pinned: action.nextPinned
+          });
     } else {
       await openInput();
     }

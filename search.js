@@ -37,6 +37,15 @@ export const SETTINGS_ENTRIES = Object.freeze([
     keywords: "extensions add-ons addons plugins manage installed developer mode",
     icon: "extensions",
     aliases: ["helium://extensions", "chrome://extensions"]
+  }),
+  Object.freeze({
+    id: "bookmarks",
+    title: "Manage bookmarks",
+    url: "helium://bookmarks",
+    description: "Open the browser bookmark manager",
+    keywords: "bookmarks favorites favourites manage edit organize folders library",
+    icon: "bookmarks",
+    aliases: ["helium://bookmarks", "chrome://bookmarks"]
   })
 ]);
 
@@ -103,19 +112,54 @@ function fieldScore(token, field, weight) {
   return fuzzy === null ? null : fuzzy * weight;
 }
 
+function urlComponentScore(token, value) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    const hostParts = normalize(url.hostname).split(".").filter(Boolean);
+    const pathParts = url.pathname
+      .split("/")
+      .filter(Boolean)
+      .map((part) => {
+        try {
+          return normalize(decodeURIComponent(part));
+        } catch {
+          return normalize(part);
+        }
+      });
+    const parts = [...hostParts, ...pathParts];
+    let best = null;
+
+    parts.forEach((part, index) => {
+      const isFinalPathPart = pathParts.length > 0 && index === parts.length - 1;
+      let score = null;
+      if (part === token) score = isFinalPathPart ? 950 : 800;
+      else if (part.startsWith(token)) score = isFinalPathPart ? 600 : 450;
+      else if (part.includes(token)) score = 250;
+      if (score !== null) best = Math.max(best ?? -Infinity, score);
+    });
+    return best;
+  } catch {
+    return null;
+  }
+}
+
 export function scoreTab(tab, query) {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return 0;
 
-  const title = normalize(tab.title || "");
-  const url = normalize(tab.url || tab.pendingUrl || "");
+  const title = normalize(tab.searchTitle || tab.title || "");
+  const rawUrl = tab.url || tab.pendingUrl || "";
+  const url = normalize(rawUrl);
   const tokens = normalizedQuery.split(/\s+/);
   let total = 0;
 
   for (const token of tokens) {
     const titleScore = fieldScore(token, title, 1.4);
     const urlScore = fieldScore(token, url, 1);
-    const best = Math.max(titleScore ?? -1, urlScore ?? -1);
+    const componentScore = urlComponentScore(token, rawUrl);
+    const best = Math.max(titleScore ?? -1, urlScore ?? -1, componentScore ?? -1);
     if (best < 0) return null;
     total += best;
   }
@@ -145,6 +189,47 @@ export function getSettingById(id) {
   return SETTINGS_ENTRIES.find((setting) => setting.id === id) || null;
 }
 
+export function filterTabActions(query, currentTab) {
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery || !currentTab?.id) return [];
+
+  const actions = [
+    {
+      id: "toggle-pin",
+      title: currentTab.pinned ? "Unpin tab" : "Pin tab",
+      description: currentTab.pinned
+        ? "Move the current tab back to regular tabs"
+        : "Keep the current tab pinned in the tab strip",
+      keywords: "pin pinned unpin tab keep",
+      nextPinned: !currentTab.pinned,
+      icon: "pin"
+    },
+    {
+      id: "toggle-favorite",
+      title: currentTab.bookmarkId ? "Remove from Favorites" : "Add to Favorites",
+      description: currentTab.bookmarkId
+        ? "Remove the current page from browser bookmarks"
+        : "Add the current page to browser bookmarks",
+      keywords: "favorite favourite star bookmark add remove current page",
+      nextFavorite: !currentTab.bookmarkId,
+      bookmarkId: currentTab.bookmarkId || null,
+      icon: "favorite"
+    }
+  ];
+
+  return actions
+    .map((action) => ({
+      action,
+      score: scoreTab({
+        title: `${action.title} ${action.keywords}`,
+        url: ""
+      }, normalizedQuery)
+    }))
+    .filter(({ score }) => score !== null)
+    .sort((left, right) => right.score - left.score)
+    .map(({ action }) => action);
+}
+
 export function getSettingForTab(tab) {
   const url = normalize(tab?.url || tab?.pendingUrl || "").replace(/[?#].*$/, "").replace(/\/$/, "");
   let bestMatch = null;
@@ -165,6 +250,24 @@ export function getSettingForTab(tab) {
   return bestMatch;
 }
 
+export function cleanTabTitle(tab) {
+  const title = tab?.title || "";
+  const value = tab?.url || tab?.pendingUrl || "";
+  try {
+    const hostname = new URL(value).hostname.toLocaleLowerCase();
+    if (hostname === "github.com" || hostname.endsWith(".github.com")) {
+      return title.replace(/^github\s*[-–—]\s*/i, "").trim() || title;
+    }
+  } catch {
+    // Keep the original title for malformed and internal URLs.
+  }
+  return title;
+}
+
+export function displayTabTitle(tab) {
+  return tab?.bookmarkTitle || cleanTabTitle(tab);
+}
+
 export function filterTabs(tabs, query) {
   const normalizedQuery = normalize(query);
   const scored = tabs
@@ -178,6 +281,91 @@ export function filterTabs(tabs, query) {
   });
 
   return scored.map(({ tab }) => tab);
+}
+
+export function bookmarkUrlKey(value) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    return url.href;
+  } catch {
+    return normalize(value || "");
+  }
+}
+
+export function flattenBookmarks(nodes) {
+  const bookmarks = [];
+
+  function visit(node, folders) {
+    if (node.url) {
+      bookmarks.push({
+        id: node.id,
+        title: node.title || node.url,
+        url: node.url,
+        folder: folders.map((folder) => folder.title).filter(Boolean).join(" / "),
+        folderIds: folders.map((folder) => folder.id),
+        parentFolderId: folders.at(-1)?.id || null,
+        dateAdded: node.dateAdded || 0,
+        lastAccessed: node.dateLastUsed || node.dateAdded || 0
+      });
+      return;
+    }
+
+    const nextFolders = node.id
+      ? [...folders, { id: node.id, title: node.title || "" }]
+      : folders;
+    for (const child of node.children || []) visit(child, nextFolders);
+  }
+
+  for (const node of nodes || []) visit(node, []);
+  return bookmarks;
+}
+
+export function attachBookmarkMetadata(tabs, bookmarks) {
+  const bookmarksByUrl = new Map();
+  for (const bookmark of [...(bookmarks || [])].sort((left, right) =>
+    (right.lastAccessed || right.dateAdded || 0) - (left.lastAccessed || left.dateAdded || 0)
+  )) {
+    const key = bookmarkUrlKey(bookmark.url);
+    if (key && !bookmarksByUrl.has(key)) bookmarksByUrl.set(key, bookmark);
+  }
+
+  return (tabs || []).map((tab) => {
+    const bookmark = bookmarksByUrl.get(bookmarkUrlKey(tab.url || tab.pendingUrl || ""));
+    if (!bookmark) return tab;
+    return {
+      ...tab,
+      bookmarkId: bookmark.id,
+      bookmarkTitle: bookmark.title || tab.title || "",
+      searchTitle: `${tab.title || ""} ${bookmark.title || ""}`.trim()
+    };
+  });
+}
+
+export function bookmarksInFolders(bookmarks, selectedFolderIds = null) {
+  if (!Array.isArray(selectedFolderIds)) return bookmarks || [];
+  const selectedFolders = new Set(selectedFolderIds);
+  return (bookmarks || []).filter((bookmark) =>
+    selectedFolders.has(bookmark.parentFolderId)
+  );
+}
+
+export function filterBookmarks(
+  bookmarks,
+  query,
+  openTabs,
+  selectedFolderIds = null,
+  limit = 100
+) {
+  const openUrls = new Set((openTabs || [])
+    .map((tab) => bookmarkUrlKey(tab.url || tab.pendingUrl || ""))
+    .filter(Boolean));
+  return filterTabs(
+    bookmarksInFolders(bookmarks, selectedFolderIds).filter((bookmark) =>
+      !openUrls.has(bookmarkUrlKey(bookmark.url))
+    ),
+    query
+  ).slice(0, limit);
 }
 
 export function isSplitTab(tab, splitViewIdNone = -1) {
@@ -217,11 +405,14 @@ export function buildTabBlocks(tabs, splitViewIdNone = -1) {
 
   return [...blocksByKey.values()].map((block) => {
     block.members.sort(compareTabs);
+    const completeSplit = block.type === "split" && block.members.length > 1;
     const representative =
       block.members.find((tab) => tab.active) ||
       [...block.members].sort((left, right) => (right.lastAccessed || 0) - (left.lastAccessed || 0))[0];
     return {
       ...block,
+      type: completeSplit ? "split" : "single",
+      splitViewId: completeSplit ? block.splitViewId : null,
       representative,
       active: block.members.some((tab) => tab.active),
       lastAccessed: Math.max(...block.members.map((tab) => tab.lastAccessed || 0))
@@ -235,7 +426,7 @@ export function filterTabBlocks(tabs, query, splitViewIdNone = -1) {
     .map((block) => ({
       block,
       score: scoreTab({
-        title: block.members.map((tab) => tab.title || "").join(" "),
+        title: block.members.map((tab) => tab.searchTitle || tab.title || "").join(" "),
         url: block.members.map((tab) => tab.url || tab.pendingUrl || "").join(" ")
       }, normalizedQuery)
     }))
@@ -256,7 +447,7 @@ export function isIgnoredRecentlyClosedTab(tab) {
     .replace(/\s+/g, " ");
   const url = normalize(tab?.url || tab?.pendingUrl || "");
 
-  const isSettingsPage = /^(?:helium|chrome):\/\/(?:settings|extensions)(?:\/|$)/.test(url);
+  const isSettingsPage = /^(?:helium|chrome):\/\/(?:settings|extensions|bookmarks)(?:\/|$)/.test(url);
   const isNewTabPage = /^(?:helium|chrome):\/\/(?:newtab|new-tab)(?:\/|$)/.test(url) ||
     url === "about:newtab";
   const isNewSplitPage = url.includes("tab-search.top-chrome/split_new_tab_page.html") ||
@@ -264,6 +455,9 @@ export function isIgnoredRecentlyClosedTab(tab) {
   const isSettingsTitle = title === "settings" ||
     title === "keyboard shortcuts" ||
     title === "extensions" ||
+    title === "bookmarks" ||
+    title === "bookmark manager" ||
+    title === "manage bookmarks" ||
     /^settings\s*-\s*keyboard shortcuts$/.test(title);
   const isPlaceholderTitle = title === "new tab" || title === "new split tab";
 
@@ -281,7 +475,7 @@ export function sessionToItem(session) {
   const primaryTab = tabs.find((tab) => tab.active) || tabs[0];
   const isWindow = Boolean(session.window);
   const extraTabs = Math.max(0, tabs.length - 1);
-  const primaryTitle = primaryTab.title || "Untitled tab";
+  const primaryTitle = cleanTabTitle(primaryTab) || "Untitled tab";
 
   return {
     sessionId,

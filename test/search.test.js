@@ -2,11 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  attachBookmarkMetadata,
+  bookmarkUrlKey,
   buildTabBlocks,
+  cleanTabTitle,
+  displayTabTitle,
+  filterBookmarks,
   filterRecentlyClosed,
   filterSettings,
+  filterTabActions,
   filterTabBlocks,
   filterTabs,
+  flattenBookmarks,
   getSettingById,
   getSettingForTab,
   isIgnoredRecentlyClosedTab,
@@ -16,6 +23,11 @@ import {
   scoreTab,
   sessionToItem
 } from "../search.js";
+import {
+  DEFAULT_COMMAND_BAR_COLOR,
+  commandBarThemeCss,
+  normalizeThemeColor
+} from "../theme.js";
 
 const tabs = [
   { id: 1, title: "GitHub · Dashboard", url: "https://github.com/", lastAccessed: 10 },
@@ -23,8 +35,37 @@ const tabs = [
   { id: 3, title: "Gmail", url: "https://mail.google.com/", lastAccessed: 30 }
 ];
 
+test("normalizes configurable command-bar colors", () => {
+  assert.equal(normalizeThemeColor("#abc"), "#aabbcc");
+  assert.equal(normalizeThemeColor("#A1B2C3"), "#a1b2c3");
+  assert.equal(normalizeThemeColor("purple"), DEFAULT_COMMAND_BAR_COLOR);
+  assert.match(commandBarThemeCss("#123456", ":host"), /:host[\s\S]*#123456/);
+});
+
 test("normalizes case and accents", () => {
   assert.equal(normalize("  HÉLIUM  "), "helium");
+});
+
+test("removes redundant GitHub branding only from GitHub tabs", () => {
+  assert.equal(cleanTabTitle({
+    title: "GitHub - imputnet/helium: Private Chromium browser",
+    url: "https://github.com/imputnet/helium"
+  }), "imputnet/helium: Private Chromium browser");
+  assert.equal(cleanTabTitle({
+    title: "GitHub – Dashboard",
+    url: "https://github.com/"
+  }), "Dashboard");
+  assert.equal(cleanTabTitle({
+    title: "GitHub - documentation",
+    url: "https://example.com/github"
+  }), "GitHub - documentation");
+
+  const githubTab = {
+    id: 9,
+    title: "GitHub - imputnet/helium",
+    url: "https://github.com/imputnet/helium"
+  };
+  assert.equal(filterTabs([githubTab], "github")[0], githubTab);
 });
 
 test("ranks title matches ahead of URL-only matches", () => {
@@ -61,9 +102,26 @@ test("finds Helium settings destinations by title and keywords", () => {
   assert.equal(filterSettings("settings")[0].url, "helium://settings");
   assert.equal(filterSettings("extensions")[0].url, "helium://extensions");
   assert.equal(filterSettings("plugins")[0].id, "extensions");
+  assert.equal(filterSettings("manage bookmarks")[0].url, "helium://bookmarks");
+  assert.equal(filterSettings("organize favorites")[0].id, "bookmarks");
   assert.deepEqual(filterSettings(""), []);
   assert.equal(getSettingById("keyboard-shortcuts"), shortcuts);
   assert.equal(getSettingById("missing"), null);
+});
+
+test("offers inverse pin and favorite actions for the current tab", () => {
+  assert.equal(filterTabActions("pin", { id: 1, pinned: false })[0].title, "Pin tab");
+  assert.equal(filterTabActions("unpin", { id: 1, pinned: true })[0].title, "Unpin tab");
+  assert.equal(
+    filterTabActions("favorite", { id: 1, bookmarkId: null })[0].title,
+    "Add to Favorites"
+  );
+  assert.equal(
+    filterTabActions("remove favorite", { id: 1, bookmarkId: "bookmark" })[0].title,
+    "Remove from Favorites"
+  );
+  assert.equal(filterTabActions("youtube", { id: 1, pinned: false }).length, 0);
+  assert.deepEqual(filterTabActions("pin", null), []);
 });
 
 test("recognizes open internal destinations with their most specific behavior", () => {
@@ -73,11 +131,72 @@ test("recognizes open internal destinations with their most specific behavior", 
     "keyboard-shortcuts"
   );
   assert.equal(getSettingForTab({ url: "chrome://extensions/?id=abc" }).id, "extensions");
+  assert.equal(getSettingForTab({ url: "helium://bookmarks/?id=42" }).id, "bookmarks");
   assert.equal(getSettingForTab({ url: "https://example.com/extensions" }), null);
 });
 
 test("sorts empty queries by recent access", () => {
   assert.deepEqual(filterTabs(tabs, "").map((tab) => tab.id), [3, 2, 1]);
+});
+
+test("flattens and filters bookmarks that are not already open", () => {
+  const bookmarks = flattenBookmarks([{
+    id: "root",
+    title: "Bookmarks bar",
+    children: [
+      { id: "b1", title: "Helium", url: "https://helium.computer/", dateAdded: 10 },
+      {
+        id: "folder",
+        title: "Development",
+        children: [{ id: "b2", title: "Chrome APIs", url: "https://developer.chrome.com/docs/extensions", dateLastUsed: 20 }]
+      }
+    ]
+  }]);
+
+  assert.equal(bookmarks[1].folder, "Bookmarks bar / Development");
+  assert.equal(bookmarkUrlKey("https://helium.computer/#download"), "https://helium.computer/");
+  assert.deepEqual(
+    filterBookmarks(bookmarks, "", [{ url: "https://helium.computer/#about" }]).map((item) => item.id),
+    ["b2"]
+  );
+  assert.equal(filterBookmarks(bookmarks, "chrome", []).length, 1);
+  assert.deepEqual(filterBookmarks(bookmarks, "", [], ["folder"]).map((item) => item.id), ["b2"]);
+  assert.deepEqual(filterBookmarks(bookmarks, "", [], []).map((item) => item.id), []);
+
+  const [favoriteTab] = attachBookmarkMetadata([{
+    id: 9,
+    title: "GitHub - tempoxyz/zones: Zones are private blockchains",
+    url: "https://github.com/tempoxyz/zones"
+  }], [{
+    id: "favorite",
+    title: "zones",
+    url: "https://github.com/tempoxyz/zones"
+  }]);
+  assert.equal(displayTabTitle(favoriteTab), "zones");
+  assert.equal(filterTabs([favoriteTab], "zones")[0], favoriteTab);
+  assert.equal(filterTabs([favoriteTab], "github")[0], favoriteTab);
+});
+
+test("ranks an exact URL path component above a partial owner match", () => {
+  const favorites = [
+    {
+      id: "zones",
+      title: "zones",
+      url: "https://github.com/tempoxyz/zones",
+      lastAccessed: 20
+    },
+    {
+      id: "tempo",
+      title: "payments repository",
+      url: "https://github.com/tempoxyz/tempo",
+      lastAccessed: 10
+    }
+  ];
+
+  assert.deepEqual(
+    filterBookmarks(favorites, "tempo", []).map((bookmark) => bookmark.id),
+    ["tempo", "zones"]
+  );
 });
 
 test("groups members of a split view into one tab block", () => {
@@ -95,6 +214,14 @@ test("groups members of a split view into one tab block", () => {
   assert.equal(blocks[1].type, "split");
   assert.deepEqual(blocks[1].members.map((tab) => tab.id), [2, 3]);
   assert.equal(blocks[1].representative.id, 3);
+});
+
+test("treats a lone visible split member as a normal tab", () => {
+  const [block] = buildTabBlocks([
+    { id: 2, windowId: 7, index: 1, splitViewId: 42, active: false }
+  ]);
+  assert.equal(block.type, "single");
+  assert.equal(block.splitViewId, null);
 });
 
 test("matches a split block through either pane", () => {
@@ -122,6 +249,7 @@ test("filters built-in settings and placeholder tabs from recently closed", () =
     { title: "Keyboard shortcuts", url: "helium://settings/system/shortcuts" },
     { title: "Settings", url: "helium://settings" },
     { title: "Extensions", url: "chrome://extensions/" },
+    { title: "Bookmarks", url: "helium://bookmarks/" },
     { title: "New Tab", url: "chrome://newtab/" },
     { title: "New split tab", url: "chrome://tab-search.top-chrome/split_new_tab_page.html" },
     { title: "New split tab", url: "chrome-extension://extension-id/split-picker.html" }

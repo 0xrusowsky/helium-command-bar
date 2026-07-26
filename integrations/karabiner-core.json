@@ -1,0 +1,61 @@
+{
+  "title": "Helium Keyboard Tools — Core",
+  "rules": [
+    {
+      "description": "Use Ctrl-Tab to navigate split-aware tab blocks in Helium",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "tab", "modifiers": { "mandatory": ["control", "shift"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "left_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        },
+        {
+          "type": "basic",
+          "from": { "key_code": "tab", "modifiers": { "mandatory": ["control"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "right_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        }
+      ]
+    },
+    {
+      "description": "Use Ctrl-H and Ctrl-L to switch split panes in Helium",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "h", "modifiers": { "mandatory": ["control"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "up_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        },
+        {
+          "type": "basic",
+          "from": { "key_code": "l", "modifiers": { "mandatory": ["control"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "up_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        }
+      ]
+    },
+    {
+      "description": "Use Command-T to open the Helium command bar",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "t", "modifiers": { "mandatory": ["command"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "spacebar", "modifiers": ["command", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        }
+      ]
+    },
+    {
+      "description": "Use Option-T to create a new split in Helium",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "t", "modifiers": { "mandatory": ["option"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "n", "modifiers": ["command", "option"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        }
+      ]
+    }
+  ]
+}

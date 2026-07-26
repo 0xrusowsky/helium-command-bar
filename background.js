@@ -1,14 +1,27 @@
+import "./split-navigation.js";
+
 import {
+  attachBookmarkMetadata,
+  bookmarkUrlKey,
+  bookmarksInFolders,
+  displayTabTitle,
+  filterBookmarks,
   filterRecentlyClosed,
   filterSettings,
+  filterTabActions,
   filterTabBlocks,
   filterTabs,
+  flattenBookmarks,
   getSettingById,
   getSettingForTab,
   isSplitTab,
   resolveInput,
   sessionToItem
 } from "./search.js";
+import {
+  DEFAULT_COMMAND_BAR_COLOR,
+  commandBarThemeCss
+} from "./theme.js";
 
 const NATIVE_SPLIT_PICKER_URL = "chrome://tab-search.top-chrome/split_new_tab_page.html";
 const VISUAL_PERMISSION = { origins: ["<all_urls>"] };
@@ -17,6 +30,19 @@ const blurredPartnersByOwner = new Map();
 const inactiveEffectByTab = new Map();
 
 let commandBarCssPromise;
+let bookmarkCachePromise;
+
+function getBookmarks() {
+  if (!chrome.bookmarks) return Promise.resolve([]);
+  if (!bookmarkCachePromise) {
+    bookmarkCachePromise = chrome.bookmarks.getTree().then(flattenBookmarks);
+  }
+  return bookmarkCachePromise;
+}
+
+function invalidateBookmarks() {
+  bookmarkCachePromise = null;
+}
 
 function removeInactiveEffect(extensionId) {
   document.getElementById(`helium-command-bar-inactive-blur-${extensionId}`)?.remove();
@@ -178,15 +204,31 @@ function getCommandBarCss() {
   return commandBarCssPromise;
 }
 
+function faviconUrlForPage(pageUrl) {
+  const url = new URL(chrome.runtime.getURL("/_favicon/"));
+  url.searchParams.set("pageUrl", pageUrl);
+  url.searchParams.set("size", "32");
+  return url.href;
+}
+
+function bookmarkForOverlay(bookmark) {
+  return {
+    ...bookmark,
+    favIconUrl: faviconUrlForPage(bookmark.url)
+  };
+}
+
 function tabForOverlay(tab) {
   return {
     id: tab.id,
     windowId: tab.windowId,
-    title: tab.title || "",
+    title: displayTabTitle(tab),
     url: tab.url || "",
     pendingUrl: tab.pendingUrl || "",
     favIconUrl: tab.favIconUrl || "",
     active: Boolean(tab.active),
+    pinned: Boolean(tab.pinned),
+    bookmarkId: tab.bookmarkId || null,
     lastAccessed: tab.lastAccessed || 0,
     index: tab.index ?? 0,
     splitViewId: tab.splitViewId
@@ -195,19 +237,36 @@ function tabForOverlay(tab) {
 
 async function queryRows(query, requesterTab) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions, css, settings] = await Promise.all([
+  const [tabs, sessions, bookmarks, css, settings] = await Promise.all([
     chrome.tabs.query({}),
     chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
+    getBookmarks(),
     getCommandBarCss(),
     chrome.storage.sync.get({
       defaultSplitMode: "compact",
-      blurInactiveSplitPane: false
+      blurInactiveSplitPane: false,
+      commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
+      showFavorites: true,
+      showRecentlyClosed: true,
+      favoriteFolderIds: null
     })
   ]);
-  const regularTabs = tabs.filter((tab) => !getSettingForTab(tab));
+  const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
+  const enabledBookmarks = settings.showFavorites === false ? [] : configuredBookmarks;
+  const regularTabs = attachBookmarkMetadata(
+    tabs.filter((tab) => tab.id !== requesterTab.id && !getSettingForTab(tab)),
+    enabledBookmarks
+  );
   const matchedBlocks = filterTabBlocks(regularTabs, input, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
-  const matchedClosed = filterRecentlyClosed(sessions, input);
+  const matchedClosed = settings.showRecentlyClosed === false
+    ? []
+    : filterRecentlyClosed(sessions, input);
+  const matchedBookmarks = settings.showFavorites === false
+    ? []
+    : filterBookmarks(bookmarks, input, tabs, settings.favoriteFolderIds);
   const matchedSettings = filterSettings(input);
+  const currentActionTab = attachBookmarkMetadata([requesterTab], configuredBookmarks)[0];
+  const matchedTabActions = filterTabActions(input, currentActionTab);
   const target = resolveInput(input);
   const openSettingTabs = new Map();
   for (const tab of [...tabs].sort((left, right) =>
@@ -235,13 +294,22 @@ async function queryRows(query, requesterTab) {
         ? tabForOverlay(openSettingTabs.get(setting.id))
         : null
     })),
+    ...matchedTabActions.map((action) => ({
+      kind: "tab-action",
+      action,
+      tabId: requesterTab.id
+    })),
     ...openRows,
+    ...matchedBookmarks.map((bookmark) => ({
+      kind: "bookmark",
+      bookmark: bookmarkForOverlay(bookmark)
+    })),
     ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
   ];
 
   let label;
   if (!input.trim() || rows.length > 1) {
-    label = `${openRows.length} open · ${matchedClosed.length} recently closed`;
+    label = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
   } else {
     label = "No matching tabs";
   }
@@ -257,7 +325,7 @@ async function queryRows(query, requesterTab) {
   }
 
   return {
-    css,
+    css: `${css}\n${commandBarThemeCss(settings.commandBarColor, ":host")}`,
     rows,
     label,
     defaultSplitExpanded: settings.defaultSplitMode === "expanded",
@@ -267,17 +335,28 @@ async function queryRows(query, requesterTab) {
 
 async function querySplitPickerRows(query, pickerTabId) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions] = await Promise.all([
+  const [tabs, sessions, bookmarks, settings] = await Promise.all([
     chrome.tabs.query({}),
-    chrome.sessions.getRecentlyClosed({ maxResults: 25 })
+    chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
+    getBookmarks(),
+    chrome.storage.sync.get({
+      showFavorites: true,
+      showRecentlyClosed: true,
+      favoriteFolderIds: null
+    })
   ]);
-  const eligibleTabs = tabs.filter((tab) =>
+  const enabledBookmarks = settings.showFavorites === false
+    ? []
+    : bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
+  const eligibleTabs = attachBookmarkMetadata(tabs.filter((tab) =>
     tab.id !== pickerTabId &&
     !isSplitTab(tab, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1) &&
     tab.url !== chrome.runtime.getURL("split-picker.html")
-  );
+  ), enabledBookmarks);
   const matchedTabs = filterTabs(eligibleTabs, input);
-  const matchedClosed = filterRecentlyClosed(sessions, input);
+  const matchedClosed = settings.showRecentlyClosed === false
+    ? []
+    : filterRecentlyClosed(sessions, input);
   const target = resolveInput(input);
 
   return {
@@ -291,7 +370,76 @@ async function querySplitPickerRows(query, pickerTabId) {
 }
 
 async function handleOverlayMessage(message, sender) {
-  if (sender.id !== chrome.runtime.id || sender.tab?.id === undefined) return undefined;
+  if (sender.id !== chrome.runtime.id) return undefined;
+
+  if (message?.type === "helium-command-bar:set-pinned") {
+    const tabId = Number(message.tabId);
+    if (!Number.isInteger(tabId)) throw new Error("Invalid tab");
+    if (sender.tab?.id !== undefined && sender.tab.id !== tabId) {
+      throw new Error("Cannot pin a different tab");
+    }
+    await chrome.tabs.update(tabId, { pinned: Boolean(message.pinned) });
+    return { ok: true };
+  }
+
+  if (message?.type === "helium-command-bar:set-favorite") {
+    if (!chrome.bookmarks) return { ok: false };
+    const tabId = Number(message.tabId);
+    if (!Number.isInteger(tabId)) throw new Error("Invalid tab");
+    if (sender.tab?.id !== undefined && sender.tab.id !== tabId) {
+      throw new Error("Cannot favorite a different tab");
+    }
+
+    const tab = await chrome.tabs.get(tabId);
+    const pageUrl = tab.url || tab.pendingUrl;
+    if (!pageUrl) return { ok: false };
+    const pageKey = bookmarkUrlKey(pageUrl);
+    const matches = (await getBookmarks()).filter((bookmark) =>
+      bookmarkUrlKey(bookmark.url) === pageKey
+    );
+    const settings = await chrome.storage.sync.get({ favoriteFolderIds: null });
+    const favoriteMatches = bookmarksInFolders(matches, settings.favoriteFolderIds);
+
+    if (message.favorite) {
+      if (!favoriteMatches.length) {
+        const createDetails = {
+          title: displayTabTitle(tab) || tab.title || pageUrl,
+          url: pageUrl
+        };
+        if (Array.isArray(settings.favoriteFolderIds)) {
+          let parentId = settings.favoriteFolderIds[0];
+          if (!parentId) {
+            const [root] = await chrome.bookmarks.getTree();
+            parentId = root?.children?.find((node) => !node.url)?.id;
+            if (parentId) {
+              await chrome.storage.sync.set({ favoriteFolderIds: [parentId] });
+            }
+          }
+          if (parentId) createDetails.parentId = parentId;
+        }
+        await chrome.bookmarks.create(createDetails);
+      }
+    } else {
+      const requested = typeof message.bookmarkId === "string"
+        ? favoriteMatches.find((bookmark) => bookmark.id === message.bookmarkId)
+        : null;
+      const bookmark = requested || favoriteMatches[0];
+      if (bookmark) await chrome.bookmarks.remove(bookmark.id);
+    }
+    invalidateBookmarks();
+    return { ok: true };
+  }
+
+  if (message?.type === "helium-command-bar:activate-tab") {
+    const tabId = Number(message.tabId);
+    const windowId = Number(message.windowId);
+    if (!Number.isInteger(tabId) || !Number.isInteger(windowId)) throw new Error("Invalid tab");
+    await chrome.tabs.update(tabId, { active: true });
+    await chrome.windows.update(windowId, { focused: true });
+    return { ok: true };
+  }
+
+  if (sender.tab?.id === undefined) return undefined;
 
   switch (message?.type) {
     case "helium-command-bar:query":
@@ -306,15 +454,6 @@ async function handleOverlayMessage(message, sender) {
 
     case "split-picker:query":
       return querySplitPickerRows(message.query, sender.tab.id);
-
-    case "helium-command-bar:activate-tab": {
-      const tabId = Number(message.tabId);
-      const windowId = Number(message.windowId);
-      if (!Number.isInteger(tabId) || !Number.isInteger(windowId)) throw new Error("Invalid tab");
-      await chrome.windows.update(windowId, { focused: true });
-      await chrome.tabs.update(tabId, { active: true });
-      return { ok: true };
-    }
 
     case "helium-command-bar:restore-session":
       if (typeof message.sessionId !== "string" || !message.sessionId) throw new Error("Invalid session");
@@ -343,6 +482,30 @@ async function handleOverlayMessage(message, sender) {
       }
 
       await chrome.tabs.create({ url: setting.url, active: true, windowId: sender.tab.windowId });
+      return { ok: true };
+    }
+
+    case "helium-command-bar:open-bookmark": {
+      if (typeof message.bookmarkId !== "string" || !message.bookmarkId) {
+        throw new Error("Invalid bookmark");
+      }
+      const [bookmark] = await chrome.bookmarks.get(message.bookmarkId);
+      if (!bookmark?.url) return { ok: false };
+
+      const bookmarkKey = bookmarkUrlKey(bookmark.url);
+      const existingTab = (await chrome.tabs.query({})).find((tab) =>
+        bookmarkUrlKey(tab.url || tab.pendingUrl || "") === bookmarkKey
+      );
+      if (existingTab) {
+        await chrome.windows.update(existingTab.windowId, { focused: true });
+        await chrome.tabs.update(existingTab.id, { active: true });
+      } else {
+        await chrome.tabs.create({
+          url: bookmark.url,
+          active: true,
+          windowId: sender.tab.windowId
+        });
+      }
       return { ok: true };
     }
 
@@ -519,6 +682,18 @@ chrome.permissions.onRemoved.addListener((permissions) => {
   void chrome.storage.sync.set({ blurInactiveSplitPane: false });
   void syncInactiveSplitEffects();
 });
+if (chrome.bookmarks) {
+  for (const event of [
+    chrome.bookmarks.onCreated,
+    chrome.bookmarks.onRemoved,
+    chrome.bookmarks.onChanged,
+    chrome.bookmarks.onMoved,
+    chrome.bookmarks.onChildrenReordered,
+    chrome.bookmarks.onImportEnded
+  ].filter(Boolean)) {
+    event.addListener(invalidateBookmarks);
+  }
+}
 chrome.runtime.onInstalled.addListener(() => {
   void scanForNativeSplitPickers();
   void (async () => {

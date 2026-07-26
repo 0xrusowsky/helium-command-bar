@@ -1,4 +1,8 @@
 import { resolveInput } from "./search.js";
+import {
+  DEFAULT_COMMAND_BAR_COLOR,
+  applyCommandBarTheme
+} from "./theme.js";
 
 const queryInput = document.querySelector("#query");
 const actionsElement = document.querySelector("#actions");
@@ -194,6 +198,15 @@ queryInput.addEventListener("keydown", async (event) => {
   }
 });
 closeButton.addEventListener("click", () => send({ type: "split-picker:close" }));
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync" && changes.commandBarColor) {
+    applyCommandBarTheme(document, changes.commandBarColor.newValue);
+  }
+});
 
+const themeSettings = await chrome.storage.sync.get({
+  commandBarColor: DEFAULT_COMMAND_BAR_COLOR
+});
+applyCommandBarTheme(document, themeSettings.commandBarColor);
 await loadRows();
 queryInput.focus();

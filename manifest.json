@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Helium Command Bar",
-  "version": "0.14.3",
-  "description": "Find tabs, open URLs, search the web, and create new split tabs from a centered command bar.",
+  "version": "0.21.0",
+  "description": "Search tabs, create splits, and navigate Helium's split-aware tab blocks from the keyboard.",
   "minimum_chrome_version": "109",
   "permissions": [
     "activeTab",
+    "bookmarks",
+    "favicon",
     "scripting",
     "search",
     "sessions",
@@ -32,6 +34,12 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["_favicon/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "commands": {
     "open-command-bar": {
       "suggested_key": {
@@ -39,7 +47,37 @@
         "mac": "Command+Shift+Space"
       },
       "description": "Open the command bar"
-    }
+    },
+    "cycle-split-pane": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Up",
+        "mac": "MacCtrl+Shift+Up"
+      },
+      "description": "Switch to the other pane in the current split"
+    },
+    "next-tab-block": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Right",
+        "mac": "MacCtrl+Shift+Right"
+      },
+      "description": "Focus the next tab block"
+    },
+    "previous-tab-block": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Left",
+        "mac": "MacCtrl+Shift+Left"
+      },
+      "description": "Focus the previous tab block"
+    },
+    "select-tab-block-1": { "description": "Focus tab block 1" },
+    "select-tab-block-2": { "description": "Focus tab block 2" },
+    "select-tab-block-3": { "description": "Focus tab block 3" },
+    "select-tab-block-4": { "description": "Focus tab block 4" },
+    "select-tab-block-5": { "description": "Focus tab block 5" },
+    "select-tab-block-6": { "description": "Focus tab block 6" },
+    "select-tab-block-7": { "description": "Focus tab block 7" },
+    "select-tab-block-8": { "description": "Focus tab block 8" },
+    "select-tab-block-9": { "description": "Focus the last tab block" }
   },
   "icons": {
     "16": "icons/icon-16.png",

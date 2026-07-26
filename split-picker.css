@@ -6,8 +6,8 @@
   --muted: #77727f;
   --faint: #aaa5b0;
   --border: rgba(42, 35, 51, 0.13);
-  --selected: #e9e3f6;
-  --accent: #6d4bae;
+  --selected: #e7e7e9;
+  --accent: #505156;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -18,8 +18,8 @@
     --muted: #aaa4b0;
     --faint: #77717e;
     --border: rgba(255, 255, 255, 0.11);
-    --selected: #443859;
-    --accent: #c2a1f1;
+    --selected: #3c3c40;
+    --accent: #b0b0b3;
   }
 }
 

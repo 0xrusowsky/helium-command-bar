@@ -16,6 +16,34 @@
         </div>
       </header>
 
+      <section aria-labelledby="appearance-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="appearance-heading">Command bar color</h2>
+            <p>Choose the accent and selection color used by the command bar.</p>
+          </div>
+          <span id="theme-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <div class="color-setting-row">
+          <label class="color-input-label">
+            <input id="command-bar-color" type="color" value="#505156">
+            <span>Custom color</span>
+          </label>
+          <input id="command-bar-color-text" class="color-text-input" type="text"
+              value="#505156" maxlength="7" spellcheck="false" aria-label="Command bar color hex value">
+          <button id="reset-command-bar-color" class="secondary-button" type="button">Reset to neutral</button>
+        </div>
+
+        <div class="color-presets" aria-label="Color presets">
+          <button type="button" data-color="#505156" style="--preset-color: #505156">Neutral</button>
+          <button type="button" data-color="#6d4bae" style="--preset-color: #6d4bae">Purple</button>
+          <button type="button" data-color="#3973c6" style="--preset-color: #3973c6">Blue</button>
+          <button type="button" data-color="#3f7f62" style="--preset-color: #3f7f62">Green</button>
+          <button type="button" data-color="#a86132" style="--preset-color: #a86132">Orange</button>
+        </div>
+      </section>
+
       <section aria-labelledby="split-heading">
         <div class="section-heading">
           <div>
@@ -58,6 +86,50 @@
         <p class="hint">Press <kbd>→</kbd> to enter individual tab navigation and <kbd>←</kbd> to return to the complete split group. Compact mode expands and collapses visually as you do.</p>
       </section>
 
+      <section aria-labelledby="results-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="results-heading">Result sections</h2>
+            <p>Choose which saved and historical results appear in the command bar.</p>
+          </div>
+          <span id="results-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <div class="toggle-stack">
+          <label class="toggle-row">
+            <span>
+              <strong>Show Bookmarks</strong>
+              <small>Include bookmarks that are not already open.</small>
+            </span>
+            <input id="show-favorites" type="checkbox" role="switch">
+            <i aria-hidden="true"></i>
+          </label>
+
+          <div id="favorite-folder-options" class="folder-options">
+            <div class="folder-options-heading">
+              <div>
+                <strong>Bookmark folders</strong>
+                <small>Select which folders contribute bookmarks. Selecting a parent includes its descendants.</small>
+              </div>
+              <label class="all-folders-option">
+                <input id="all-favorite-folders" type="checkbox">
+                All folders
+              </label>
+            </div>
+            <div id="favorite-folder-list" class="folder-list"></div>
+          </div>
+
+          <label class="toggle-row">
+            <span>
+              <strong>Show Recently closed</strong>
+              <small>Include recently closed tabs and windows.</small>
+            </span>
+            <input id="show-recently-closed" type="checkbox" role="switch">
+            <i aria-hidden="true"></i>
+          </label>
+        </div>
+      </section>
+
       <section aria-labelledby="blur-heading">
         <div class="section-heading">
           <div>
@@ -77,6 +149,50 @@
         </label>
 
         <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects pointer-events-free ring and blur layers. Protected browser pages cannot be highlighted or blurred.</p>
+      </section>
+
+      <section aria-labelledby="keyboard-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="keyboard-heading">Keyboard navigation</h2>
+            <p>Use familiar shortcuts while treating every split as one tab block.</p>
+          </div>
+          <button id="refresh-commands" class="secondary-button" type="button">Refresh</button>
+        </div>
+
+        <div id="command-assignments" class="command-assignments" aria-live="polite"></div>
+
+        <div class="karabiner-setup">
+          <div>
+            <strong>Use Command-T for the command bar</strong>
+            <p>Import the core mappings to translate Command-T to the extension's Command-Shift-Space bridge, plus Option-T, Ctrl-Tab, Ctrl-Shift-Tab, and Ctrl-H/L. Each rule remains opt-in inside Karabiner-Elements.</p>
+          </div>
+          <a id="import-core-karabiner" class="primary-button disabled" aria-disabled="true">Import core shortcuts</a>
+        </div>
+
+        <div class="setup-summary">
+          <span id="core-status" class="setup-status" role="status" aria-live="polite"></span>
+          <p id="core-setup-message" class="permission-note"></p>
+        </div>
+        <p class="permission-note">Chromium cannot automatically assign an extension to its protected Command-T shortcut, so Karabiner provides the user-facing default without manual extension configuration. Command-T replaces Helium's normal new-tab behavior when enabled; Option-T continues to create a native split.</p>
+
+        <div class="advanced-navigation">
+          <div class="section-heading advanced-heading">
+            <div>
+              <h3>Advanced numbered navigation</h3>
+              <p>Make Command-1 through Command-8 select that tab block and Command-9 select the final block. Every split counts as one block.</p>
+            </div>
+            <span id="numbered-status" class="setup-status" role="status" aria-live="polite"></span>
+          </div>
+
+          <div id="numbered-command-assignments" class="command-assignments numbered-assignments" aria-live="polite"></div>
+
+          <p id="numbered-setup-message" class="permission-note"></p>
+          <div class="advanced-actions">
+            <button id="open-extension-shortcuts" class="secondary-button" type="button">Open extension shortcuts</button>
+            <a id="import-numbered-karabiner" class="primary-button disabled" aria-disabled="true">Import numbered shortcuts</a>
+          </div>
+        </div>
       </section>
     </main>
 
