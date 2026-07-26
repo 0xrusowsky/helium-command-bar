@@ -76,7 +76,7 @@ The **Default split view appearance** setting controls whether splits initially 
 
 Press **Right Arrow** from either default to enter the individual rows, and **Left Arrow** to return to group selection. This navigation state is temporary for the current command-bar session. The saved default is synced through Chromium's extension storage.
 
-The optional **Dim the inactive split pane** setting keeps the unfocused pane under a soft, pointer-events-free tint. While the command bar is open, that tint becomes the stronger blur treatment. Closing the command bar returns it to the persistent soft dim, and switching pane focus moves the effect immediately. It is disabled by default and requests host access when enabled; protected browser pages remain unchanged.
+The optional **Highlight the focused split pane** setting adds a persistent accent ring to the focused pane and keeps the unfocused pane under a soft, pointer-events-free tint. While the command bar is open, that tint becomes the stronger blur treatment. Closing the command bar returns it to the persistent soft dim, and switching pane focus moves both effects immediately. It is disabled by default and requests host access when enabled; protected browser pages remain unchanged.
 
 ## Development
 
@@ -95,4 +95,4 @@ npm test
 - `sessions`: list and restore recently closed tabs and windows.
 - `search`: query Helium's configured default search provider.
 - `storage`: sync the selected split appearance and inactive-pane preference.
-- Optional `<all_urls>` host access: inject only the persistent dim/temporary blur layer into inactive split panes. This permission is requested explicitly when the setting is enabled and removed again when it is disabled.
+- Optional `<all_urls>` host access: inject only the persistent focus ring, inactive-pane dim, and temporary blur layers into split panes. This permission is requested explicitly when the setting is enabled and removed again when it is disabled.

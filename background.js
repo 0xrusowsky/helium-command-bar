@@ -103,7 +103,10 @@ async function syncInactiveSplitEffects(providedTabs) {
   const desired = new Map();
 
   for (const activeTab of tabs.filter((tab) => tab.active)) {
-    for (const partner of getSplitPartners(tabs, activeTab)) desired.set(partner.id, "dim");
+    const partners = getSplitPartners(tabs, activeTab);
+    if (!partners.length) continue;
+    desired.set(activeTab.id, "focus");
+    for (const partner of partners) desired.set(partner.id, "dim");
   }
 
   for (const [ownerTabId, partnerIds] of blurredPartnersByOwner) {

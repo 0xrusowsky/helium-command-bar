@@ -61,7 +61,7 @@
       <section aria-labelledby="blur-heading">
         <div class="section-heading">
           <div>
-            <h2 id="blur-heading">Inactive split pane</h2>
+            <h2 id="blur-heading">Split focus emphasis</h2>
             <p>Make the focused pane more obvious whenever you use a split view.</p>
           </div>
           <span id="blur-status" role="status" aria-live="polite"></span>
@@ -69,14 +69,14 @@
 
         <label class="toggle-row">
           <span>
-            <strong>Dim the inactive split pane</strong>
-            <small>Keep the other pane softly dimmed, then strengthen it with blur while the command bar is open.</small>
+            <strong>Highlight the focused split pane</strong>
+            <small>Add an accent ring to the focused pane and softly dim the other pane; the dim becomes a blur while the command bar is open.</small>
           </span>
           <input id="blur-inactive-split" type="checkbox" role="switch">
           <i aria-hidden="true"></i>
         </label>
 
-        <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects a pointer-events-free visual layer. Protected browser pages cannot be dimmed or blurred.</p>
+        <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects pointer-events-free ring, dim, and blur layers. Protected browser pages cannot be highlighted, dimmed, or blurred.</p>
       </section>
     </main>
 

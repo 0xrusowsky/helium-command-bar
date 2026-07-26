@@ -7,6 +7,7 @@
   root.setAttribute("aria-hidden", "true");
 
   function applyMode(mode) {
+    const focused = mode === "focus";
     const blur = mode === "blur";
     root.dataset.mode = mode;
     root.style.cssText = [
@@ -16,10 +17,12 @@
       "z-index: 2147483646 !important",
       "display: block !important",
       "pointer-events: none !important",
-      `background: rgba(12, 10, 16, ${blur ? "0.12" : "0.075"}) !important`,
+      "border-radius: 7px !important",
+      `background: ${focused ? "transparent" : `rgba(12, 10, 16, ${blur ? "0.12" : "0.075"})`} !important`,
+      `box-shadow: ${focused ? "inset 0 0 0 2px rgba(151, 105, 220, 0.82), inset 0 0 14px rgba(151, 105, 220, 0.10)" : "none"} !important`,
       `backdrop-filter: ${blur ? "blur(3px)" : "none"} !important`,
       `-webkit-backdrop-filter: ${blur ? "blur(3px)" : "none"} !important`,
-      "transition: background 140ms ease, backdrop-filter 140ms ease !important"
+      "transition: background 140ms ease, box-shadow 140ms ease, backdrop-filter 140ms ease !important"
     ].join(";");
   }
 
@@ -31,7 +34,7 @@
 
   function handleMessage(message, _sender, sendResponse) {
     if (message?.type === "helium-command-bar:set-inactive-effect") {
-      if (message.mode === "dim" || message.mode === "blur") applyMode(message.mode);
+      if (["focus", "dim", "blur"].includes(message.mode)) applyMode(message.mode);
       else cleanup();
       sendResponse({ ok: true });
       return;
