@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
   buildTabBlocks,
   cleanTabTitle,
   displayTabTitle,
+  duplicateTabIds,
   filterBookmarks,
   filterRecentlyClosed,
   filterSettings,
@@ -19,6 +21,7 @@ import {
   isIgnoredRecentlyClosedTab,
   isSplitTab,
   normalize,
+  normalizeResultSectionOrder,
   resolveInput,
   scoreTab,
   sessionToItem
@@ -42,8 +45,46 @@ test("normalizes configurable command-bar colors", () => {
   assert.match(commandBarThemeCss("#123456", ":host"), /:host[\s\S]*#123456/);
 });
 
+test("finds duplicate tabs using the exact URL", () => {
+  const openTabs = [
+    { id: 1, url: "https://example.com/page?view=one#top", lastAccessed: 10 },
+    { id: 2, url: "https://example.com/page?view=one#top", lastAccessed: 20 },
+    { id: 3, url: "https://example.com/page?view=two#top", lastAccessed: 30 },
+    { id: 4, url: "https://example.com/page?view=one#bottom", lastAccessed: 40 }
+  ];
+
+  assert.deepEqual(duplicateTabIds(openTabs), [1]);
+  assert.deepEqual(duplicateTabIds(openTabs, 1), [2]);
+});
+
+test("prefers pinned then active duplicate tabs when no invoked tab matches", () => {
+  const openTabs = [
+    { id: 1, url: "https://one.example/", active: true, lastAccessed: 30 },
+    { id: 2, url: "https://one.example/", pinned: true, lastAccessed: 10 },
+    { id: 3, url: "https://two.example/", lastAccessed: 10 },
+    { id: 4, url: "https://two.example/", active: true, lastAccessed: 5 }
+  ];
+
+  assert.deepEqual(duplicateTabIds(openTabs), [1, 3]);
+});
+
 test("normalizes case and accents", () => {
   assert.equal(normalize("  HÉLIUM  "), "helium");
+});
+
+test("normalizes configurable result section order", () => {
+  assert.deepEqual(
+    normalizeResultSectionOrder(["favorites", "open", "closed"]),
+    ["favorites", "open", "closed"]
+  );
+  assert.deepEqual(
+    normalizeResultSectionOrder(["favorites", "favorites", "unknown"]),
+    ["favorites", "open", "closed"]
+  );
+  assert.deepEqual(
+    normalizeResultSectionOrder(null),
+    [...DEFAULT_RESULT_SECTION_ORDER]
+  );
 });
 
 test("removes redundant GitHub branding only from GitHub tabs", () => {
@@ -137,6 +178,20 @@ test("recognizes open internal destinations with their most specific behavior", 
 
 test("sorts empty queries by recent access", () => {
   assert.deepEqual(filterTabs(tabs, "").map((tab) => tab.id), [3, 2, 1]);
+});
+
+test("sorts open tabs by recent access instead of active or pinned state", () => {
+  const openTabs = [
+    { id: 1, windowId: 1, title: "Pinned", url: "https://pinned.example/", pinned: true, active: true, lastAccessed: 10 },
+    { id: 2, windowId: 1, title: "Recent", url: "https://recent.example/", lastAccessed: 30 },
+    { id: 3, windowId: 1, title: "Middle", url: "https://middle.example/", lastAccessed: 20 }
+  ];
+
+  assert.deepEqual(filterTabs(openTabs, "").map((tab) => tab.id), [2, 3, 1]);
+  assert.deepEqual(
+    filterTabBlocks(openTabs, "").map((block) => block.representative.id),
+    [2, 3, 1]
+  );
 });
 
 test("flattens and filters bookmarks that are not already open", () => {

@@ -102,9 +102,11 @@ Open the extension's **Options** page by right-clicking its toolbar icon, or fro
 
 The **Arc-like Helium setup** checklist links directly to Helium's protected startup and appearance settings. It guides users through restoring their workspace and enabling frameless mode with the vertical sidebar. The extension cannot inspect or change those browser-owned preferences, so completion marks are user-confirmed and stored in extension sync storage.
 
-The **Command bar color** setting accepts any color and includes Neutral, Purple, Blue, Green, and Orange presets. Neutral black/gray (`#505156`) is the default and colors both the regular command bar and enhanced split picker.
+The **Command bar color** setting accepts any color and includes Neutral, Purple, Blue, Green, and Orange presets. Neutral black/gray (`#505156`) is the default. The selected color themes the command bar, tab viewer, enhanced split picker, extension settings, and toolbar icon. The manifest icons use the redesigned neutral split-search logo as their stable fallback.
 
-The **Result sections** settings let you independently show or hide **Bookmarks** and **Recently closed**. Bookmarks can include all bookmark folders or a selected set of folders; selecting a parent folder selects its current descendants.
+The **Result sections** settings let you reorder **Open tabs**, **Bookmarks**, and **Recently closed**, so favorites can appear before open tabs. You can also independently show or hide **Bookmarks** and **Recently closed**. Bookmarks can include all bookmark folders or a selected set of folders; selecting a parent folder selects its current descendants.
+
+The optional **Silently close duplicate tabs** setting cleans up duplicate tabs across all windows whenever the command bar opens. Matching is exact and includes the complete query string and fragment. The tab where the command bar was invoked is preserved; for unrelated duplicate groups, pinned, active, and most recently accessed tabs are preferred in that order.
 
 The **Default split view appearance** setting controls whether splits initially open in:
 
@@ -133,5 +135,5 @@ npm test
 - `favicon`: retrieve browser-cached site icons for bookmark results. Only Chromium's `_favicon` endpoint is exposed to webpages so content-script results can load cached icons; no extension HTML or JavaScript is web-accessible.
 - `sessions`: list and restore recently closed tabs and windows.
 - `search`: query Helium's configured default search provider.
-- `storage`: sync command-bar preferences and remember the last-focused pane of each split for the current browser session.
+- `storage`: sync command-bar preferences, including optional duplicate-tab cleanup, and remember the last-focused pane of each split for the current browser session.
 - Optional `<all_urls>` host access: inject only the persistent focus ring and temporary inactive-pane blur into split panes. This permission is requested explicitly when the setting is enabled and removed again when it is disabled.

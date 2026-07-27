@@ -1,4 +1,5 @@
 import {
+  DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
@@ -11,6 +12,7 @@ import {
   flattenBookmarks,
   getSettingForTab,
   hostnameFor,
+  normalizeResultSectionOrder,
   resolveInput
 } from "./search.js";
 import {
@@ -38,6 +40,7 @@ let defaultSplitExpanded = false;
 let showFavorites = true;
 let showRecentlyClosed = true;
 let favoriteFolderIds = null;
+let resultSectionOrder = [...DEFAULT_RESULT_SECTION_ORDER];
 const splitNavigationKeys = new Set();
 
 function isSplitVisuallyExpanded(splitKey) {
@@ -109,7 +112,7 @@ function updateRows({ resetSelection = false } = {}) {
         splitSize: block.members.length
       }))
     : [{ kind: "tab", tab: block.members[0] }]);
-  rows = [
+  const searchRows = [
     ...(launch ? [launch] : []),
     ...matchedSettings.map((setting) => ({
       kind: "setting",
@@ -120,13 +123,19 @@ function updateRows({ resetSelection = false } = {}) {
       kind: "tab-action",
       action,
       tabId: currentTab.id
-    })),
-    ...openRows,
-    ...matchedBookmarks.map((bookmark) => ({
+    }))
+  ];
+  const sectionRows = {
+    open: openRows,
+    favorites: matchedBookmarks.map((bookmark) => ({
       kind: "bookmark",
       bookmark: bookmarkWithFavicon(bookmark)
     })),
-    ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
+    closed: matchedClosed.map((closed) => ({ kind: "closed", closed }))
+  };
+  rows = [
+    ...searchRows,
+    ...resultSectionOrder.flatMap((key) => sectionRows[key])
   ];
 
   if (resetSelection) selectedIndex = 0;
@@ -657,8 +666,9 @@ function renderRows() {
     rowIndex += 1;
   }
 
-  for (const section of Object.values(sections)) {
-    if (section.list.childElementCount > 0) fragment.append(section.section);
+  for (const key of ["search", ...resultSectionOrder]) {
+    const section = sections[key];
+    if (section?.list.childElementCount > 0) fragment.append(section.section);
   }
   resultsElement.replaceChildren(fragment);
   selectedIndex = Math.max(0, Math.min(selectedIndex, navigationItems.length - 1));
@@ -938,6 +948,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.showRecentlyClosed) {
     showRecentlyClosed = changes.showRecentlyClosed.newValue !== false;
   }
+  if (changes.resultSectionOrder) {
+    resultSectionOrder = normalizeResultSectionOrder(
+      changes.resultSectionOrder.newValue
+    );
+  }
   if (changes.favoriteFolderIds) {
     favoriteFolderIds = Array.isArray(changes.favoriteFolderIds.newValue)
       ? changes.favoriteFolderIds.newValue
@@ -951,12 +966,14 @@ const storedSettings = await chrome.storage.sync.get({
   commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
   showFavorites: true,
   showRecentlyClosed: true,
-  favoriteFolderIds: null
+  favoriteFolderIds: null,
+  resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
 });
 applyCommandBarTheme(document, storedSettings.commandBarColor);
 defaultSplitExpanded = storedSettings.defaultSplitMode === "expanded";
 showFavorites = storedSettings.showFavorites !== false;
 showRecentlyClosed = storedSettings.showRecentlyClosed !== false;
+resultSectionOrder = normalizeResultSectionOrder(storedSettings.resultSectionOrder);
 favoriteFolderIds = Array.isArray(storedSettings.favoriteFolderIds)
   ? storedSettings.favoriteFolderIds
   : null;

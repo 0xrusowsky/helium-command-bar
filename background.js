@@ -1,10 +1,13 @@
 import "./split-navigation.js";
 
+import { createExtensionIconImageData } from "./icon.js";
 import {
+  DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
   displayTabTitle,
+  duplicateTabIds,
   filterBookmarks,
   filterRecentlyClosed,
   filterSettings,
@@ -15,6 +18,7 @@ import {
   getSettingById,
   getSettingForTab,
   isSplitTab,
+  normalizeResultSectionOrder,
   resolveInput,
   sessionToItem
 } from "./search.js";
@@ -31,6 +35,25 @@ const inactiveEffectByTab = new Map();
 
 let commandBarCssPromise;
 let bookmarkCachePromise;
+
+async function refreshActionIcon(value) {
+  try {
+    const color = value || (await chrome.storage.sync.get({
+      commandBarColor: DEFAULT_COMMAND_BAR_COLOR
+    })).commandBarColor;
+    const imageData = Object.fromEntries(
+      [16, 32, 48, 128].map((size) => [
+        size,
+        createExtensionIconImageData(color, size)
+      ])
+    );
+    await chrome.action.setIcon({ imageData });
+  } catch (error) {
+    console.info("Could not update the command bar icon", error);
+  }
+}
+
+void refreshActionIcon();
 
 function getBookmarks() {
   if (!chrome.bookmarks) return Promise.resolve([]);
@@ -248,7 +271,8 @@ async function queryRows(query, requesterTab) {
       commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
       showFavorites: true,
       showRecentlyClosed: true,
-      favoriteFolderIds: null
+      favoriteFolderIds: null,
+      resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
     })
   ]);
   const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
@@ -285,7 +309,7 @@ async function queryRows(query, requesterTab) {
         splitSize: block.members.length
       }))
     : [{ kind: "tab", tab: tabForOverlay(block.members[0]) }]);
-  const rows = [
+  const searchRows = [
     ...(target ? [{ kind: "launch", target }] : []),
     ...matchedSettings.map((setting) => ({
       kind: "setting",
@@ -298,13 +322,20 @@ async function queryRows(query, requesterTab) {
       kind: "tab-action",
       action,
       tabId: requesterTab.id
-    })),
-    ...openRows,
-    ...matchedBookmarks.map((bookmark) => ({
+    }))
+  ];
+  const sectionOrder = normalizeResultSectionOrder(settings.resultSectionOrder);
+  const sectionRows = {
+    open: openRows,
+    favorites: matchedBookmarks.map((bookmark) => ({
       kind: "bookmark",
       bookmark: bookmarkForOverlay(bookmark)
     })),
-    ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
+    closed: matchedClosed.map((closed) => ({ kind: "closed", closed }))
+  };
+  const rows = [
+    ...searchRows,
+    ...sectionOrder.flatMap((key) => sectionRows[key])
   ];
 
   let label;
@@ -328,6 +359,7 @@ async function queryRows(query, requesterTab) {
     css: `${css}\n${commandBarThemeCss(settings.commandBarColor, ":host")}`,
     rows,
     label,
+    sectionOrder,
     defaultSplitExpanded: settings.defaultSplitMode === "expanded",
     blurredPartnerIds
   };
@@ -617,8 +649,27 @@ async function openAnchoredFallback(tab) {
   }
 }
 
+async function closeDuplicateTabs(preferredTabId) {
+  const { closeDuplicateTabsOnActivation } = await chrome.storage.sync.get({
+    closeDuplicateTabsOnActivation: false
+  });
+  if (!closeDuplicateTabsOnActivation) return;
+
+  const tabs = await chrome.tabs.query({});
+  const tabIds = duplicateTabIds(tabs, preferredTabId);
+  if (tabIds.length) await chrome.tabs.remove(tabIds);
+}
+
 async function openCommandBar(tab) {
   if (!tab?.id) return;
+
+  try {
+    await closeDuplicateTabs(tab.id);
+  } catch (error) {
+    // Duplicate cleanup is optional and should never prevent the command bar
+    // from opening if tabs changed while the cleanup was in progress.
+    console.info("Could not close duplicate tabs", error);
+  }
 
   // Reassert the active browser window and tab before injecting. This gives
   // the page a chance to reclaim native focus from browser-owned controls such
@@ -682,7 +733,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   void syncInactiveSplitEffects();
 });
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName === "sync" && changes.blurInactiveSplitPane) void syncInactiveSplitEffects();
+  if (areaName !== "sync") return;
+  if (changes.blurInactiveSplitPane) void syncInactiveSplitEffects();
+  if (changes.commandBarColor) {
+    void refreshActionIcon(changes.commandBarColor.newValue);
+  }
 });
 chrome.permissions.onAdded.addListener((permissions) => {
   if (permissions.origins?.some((origin) => origin === "<all_urls>" || origin === "*://*/*")) {
@@ -707,6 +762,7 @@ if (chrome.bookmarks) {
   }
 }
 chrome.runtime.onInstalled.addListener(() => {
+  void refreshActionIcon();
   void scanForNativeSplitPickers();
   void (async () => {
     const tabs = await chrome.tabs.query({});
@@ -717,6 +773,7 @@ chrome.runtime.onInstalled.addListener(() => {
   })();
 });
 chrome.runtime.onStartup.addListener(() => {
+  void refreshActionIcon();
   void scanForNativeSplitPickers();
   void syncInactiveSplitEffects();
 });

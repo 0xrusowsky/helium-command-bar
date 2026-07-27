@@ -9,7 +9,7 @@
   <body>
     <main>
       <header>
-        <img src="icons/icon-48.png" width="40" height="40" alt="">
+        <img id="extension-icon" src="icons/icon-48.png" width="40" height="40" alt="">
         <div>
           <h1>Helium Command Bar</h1>
           <p>Settings</p>
@@ -32,7 +32,7 @@
           </label>
           <input id="command-bar-color-text" class="color-text-input" type="text"
               value="#505156" maxlength="7" spellcheck="false" aria-label="Command bar color hex value">
-          <button id="reset-command-bar-color" class="secondary-button" type="button">Reset to neutral</button>
+
         </div>
 
         <div class="color-presets" aria-label="Color presets">
@@ -95,6 +95,14 @@
           <span id="results-status" role="status" aria-live="polite"></span>
         </div>
 
+        <div class="section-order-setting">
+          <div>
+            <strong>Section order</strong>
+            <small>Move Bookmarks above Open tabs to show favorites first.</small>
+          </div>
+          <ol id="result-section-order" class="section-order-list"></ol>
+        </div>
+
         <div class="toggle-stack">
           <label class="toggle-row">
             <span>
@@ -128,6 +136,25 @@
             <i aria-hidden="true"></i>
           </label>
         </div>
+      </section>
+
+      <section aria-labelledby="duplicates-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="duplicates-heading">Duplicate tabs</h2>
+            <p>Optionally keep only one tab for every exact URL whenever the command bar opens.</p>
+          </div>
+          <span id="duplicates-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <label class="toggle-row">
+          <span>
+            <strong>Silently close duplicate tabs</strong>
+            <small>Close duplicates across all windows on command-bar activation. URLs must match exactly, including query parameters and fragments.</small>
+          </span>
+          <input id="close-duplicate-tabs" type="checkbox" role="switch">
+          <i aria-hidden="true"></i>
+        </label>
       </section>
 
       <section aria-labelledby="blur-heading">

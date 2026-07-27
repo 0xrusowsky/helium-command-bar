@@ -120,6 +120,7 @@
     commandBar.addEventListener(eventName, (event) => event.stopPropagation());
 
   let rows = initial.rows;
+  let sectionOrder = initial.sectionOrder || ["open", "favorites", "closed"];
   let navigationItems = [];
   let selectedIndex = 0;
   let queryGeneration = 0;
@@ -578,8 +579,9 @@
       rowIndex += 1;
     }
 
-    for (const section of Object.values(sections)) {
-      if (section.list.childElementCount > 0) fragment.append(section.section);
+    for (const key of ["search", ...sectionOrder]) {
+      const section = sections[key];
+      if (section?.list.childElementCount > 0) fragment.append(section.section);
     }
     resultsElement.replaceChildren(fragment);
     emptyElement.hidden = rows.length !== 0;
@@ -596,6 +598,7 @@
       });
       if (generation !== queryGeneration || !response) return;
       rows = response.rows;
+      sectionOrder = response.sectionOrder || sectionOrder;
       resultLabel.textContent = response.label;
       defaultSplitExpanded = Boolean(response.defaultSplitExpanded);
       if (resetSelection) selectedIndex = 0;

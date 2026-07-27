@@ -7,6 +7,24 @@ const ALLOWED_PROTOCOLS = new Set([
   "helium:"
 ]);
 
+export const DEFAULT_RESULT_SECTION_ORDER = Object.freeze([
+  "open",
+  "favorites",
+  "closed"
+]);
+
+export function normalizeResultSectionOrder(value) {
+  const allowed = new Set(DEFAULT_RESULT_SECTION_ORDER);
+  const normalized = [];
+  for (const key of Array.isArray(value) ? value : []) {
+    if (allowed.has(key) && !normalized.includes(key)) normalized.push(key);
+  }
+  for (const key of DEFAULT_RESULT_SECTION_ORDER) {
+    if (!normalized.includes(key)) normalized.push(key);
+  }
+  return normalized;
+}
+
 export const SETTINGS_ENTRIES = Object.freeze([
   Object.freeze({
     id: "settings",
@@ -276,7 +294,6 @@ export function filterTabs(tabs, query) {
 
   scored.sort((left, right) => {
     if (normalizedQuery && right.score !== left.score) return right.score - left.score;
-    if (Boolean(right.tab.active) !== Boolean(left.tab.active)) return right.tab.active ? 1 : -1;
     return (right.tab.lastAccessed || 0) - (left.tab.lastAccessed || 0);
   });
 
@@ -291,6 +308,32 @@ export function bookmarkUrlKey(value) {
   } catch {
     return normalize(value || "");
   }
+}
+
+export function duplicateTabIds(tabs, preferredTabId) {
+  const tabsByUrl = new Map();
+  for (const tab of tabs || []) {
+    const url = tab?.url || tab?.pendingUrl || "";
+    if (!url) continue;
+    if (!tabsByUrl.has(url)) tabsByUrl.set(url, []);
+    tabsByUrl.get(url).push(tab);
+  }
+
+  const duplicateIds = [];
+  for (const matchingTabs of tabsByUrl.values()) {
+    if (matchingTabs.length < 2) continue;
+    const survivor = [...matchingTabs].sort((left, right) =>
+      Number(right.id === preferredTabId) - Number(left.id === preferredTabId) ||
+      Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)) ||
+      Number(Boolean(right.active)) - Number(Boolean(left.active)) ||
+      (right.lastAccessed || 0) - (left.lastAccessed || 0)
+    )[0];
+    duplicateIds.push(...matchingTabs
+      .filter((tab) => tab.id !== survivor.id)
+      .map((tab) => tab.id)
+      .filter(Number.isInteger));
+  }
+  return duplicateIds;
 }
 
 export function flattenBookmarks(nodes) {
@@ -434,7 +477,6 @@ export function filterTabBlocks(tabs, query, splitViewIdNone = -1) {
 
   scored.sort((left, right) => {
     if (normalizedQuery && right.score !== left.score) return right.score - left.score;
-    if (right.block.active !== left.block.active) return right.block.active ? 1 : -1;
     return right.block.lastAccessed - left.block.lastAccessed;
   });
 

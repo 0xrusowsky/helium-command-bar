@@ -1,5 +1,11 @@
 import {
+  DEFAULT_RESULT_SECTION_ORDER,
+  normalizeResultSectionOrder
+} from "./search.js";
+import { extensionIconDataUrl } from "./icon.js";
+import {
   DEFAULT_COMMAND_BAR_COLOR,
+  applyCommandBarTheme,
   normalizeThemeColor
 } from "./theme.js";
 
@@ -9,12 +15,15 @@ const status = document.querySelector("#save-status");
 const blurStatus = document.querySelector("#blur-status");
 const blurToggle = document.querySelector("#blur-inactive-split");
 const resultsStatus = document.querySelector("#results-status");
+const duplicatesStatus = document.querySelector("#duplicates-status");
+const duplicateTabsToggle = document.querySelector("#close-duplicate-tabs");
 const themeStatus = document.querySelector("#theme-status");
 const themeColorInput = document.querySelector("#command-bar-color");
 const themeColorText = document.querySelector("#command-bar-color-text");
-const resetThemeColor = document.querySelector("#reset-command-bar-color");
+const extensionIcon = document.querySelector("#extension-icon");
 const themePresets = [...document.querySelectorAll("[data-color]")];
 const favoritesToggle = document.querySelector("#show-favorites");
+const resultSectionOrderList = document.querySelector("#result-section-order");
 const recentlyClosedToggle = document.querySelector("#show-recently-closed");
 const allFoldersToggle = document.querySelector("#all-favorite-folders");
 const folderOptions = document.querySelector("#favorite-folder-options");
@@ -47,9 +56,11 @@ const CORE_SHORTCUTS = Object.freeze({
 let statusTimer;
 let blurStatusTimer;
 let resultsStatusTimer;
+let duplicatesStatusTimer;
 let themeStatusTimer;
 let favoriteFolderIds = null;
 let folderEntries = [];
+let resultSectionOrder = [...DEFAULT_RESULT_SECTION_ORDER];
 
 function selectMode(mode) {
   const normalizedMode = VALID_MODES.has(mode) ? mode : DEFAULT_MODE;
@@ -80,6 +91,8 @@ function showThemeStatus() {
 
 function setThemeColor(value) {
   const color = normalizeThemeColor(value);
+  applyCommandBarTheme(document, color);
+  extensionIcon.src = extensionIconDataUrl(color);
   themeColorInput.value = color;
   themeColorText.value = color;
   for (const preset of themePresets) {
@@ -101,6 +114,54 @@ function showResultsStatus(text = "Saved") {
   resultsStatus.textContent = text;
   resultsStatus.classList.add("visible");
   resultsStatusTimer = setTimeout(() => resultsStatus.classList.remove("visible"), 1800);
+}
+
+function showDuplicatesStatus() {
+  clearTimeout(duplicatesStatusTimer);
+  duplicatesStatus.textContent = "Saved";
+  duplicatesStatus.classList.add("visible");
+  duplicatesStatusTimer = setTimeout(() => duplicatesStatus.classList.remove("visible"), 1800);
+}
+
+function renderResultSectionOrder(value) {
+  resultSectionOrder = normalizeResultSectionOrder(value);
+  const labels = {
+    open: "Open tabs",
+    favorites: "Bookmarks",
+    closed: "Recently closed"
+  };
+  const rows = resultSectionOrder.map((key, index) => {
+    const row = document.createElement("li");
+    row.className = "section-order-row";
+    const label = document.createElement("span");
+    label.textContent = labels[key];
+    const controls = document.createElement("span");
+    controls.className = "section-order-controls";
+
+    for (const [direction, symbol, title] of [
+      [-1, "↑", `Move ${labels[key]} up`],
+      [1, "↓", `Move ${labels[key]} down`]
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = symbol;
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      button.disabled = index + direction < 0 || index + direction >= resultSectionOrder.length;
+      button.addEventListener("click", async () => {
+        const nextOrder = [...resultSectionOrder];
+        const targetIndex = index + direction;
+        [nextOrder[index], nextOrder[targetIndex]] = [nextOrder[targetIndex], nextOrder[index]];
+        renderResultSectionOrder(nextOrder);
+        await chrome.storage.sync.set({ resultSectionOrder: nextOrder });
+        showResultsStatus();
+      });
+      controls.append(button);
+    }
+    row.append(label, controls);
+    return row;
+  });
+  resultSectionOrderList.replaceChildren(...rows);
 }
 
 function collectBookmarkFolders(nodes) {
@@ -267,16 +328,20 @@ const stored = await chrome.storage.sync.get({
   defaultSplitMode: DEFAULT_MODE,
   commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
   blurInactiveSplitPane: false,
+  closeDuplicateTabsOnActivation: false,
   showFavorites: true,
   showRecentlyClosed: true,
   favoriteFolderIds: null,
+  resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER,
   arcSetupCompleted: []
 });
 selectMode(stored.defaultSplitMode);
+renderResultSectionOrder(stored.resultSectionOrder);
 updateArcSetup(stored.arcSetupCompleted);
 setThemeColor(stored.commandBarColor);
 favoritesToggle.checked = stored.showFavorites !== false;
 recentlyClosedToggle.checked = stored.showRecentlyClosed !== false;
+duplicateTabsToggle.checked = stored.closeDuplicateTabsOnActivation === true;
 favoriteFolderIds = Array.isArray(stored.favoriteFolderIds)
   ? stored.favoriteFolderIds
   : null;
@@ -313,7 +378,6 @@ themeColorText.addEventListener("keydown", (event) => {
     void saveThemeColor(themeColorText.value);
   }
 });
-resetThemeColor.addEventListener("click", () => void saveThemeColor(DEFAULT_COMMAND_BAR_COLOR));
 for (const preset of themePresets) {
   preset.addEventListener("click", () => void saveThemeColor(preset.dataset.color));
 }
@@ -335,6 +399,13 @@ favoritesToggle.addEventListener("change", async () => {
 recentlyClosedToggle.addEventListener("change", async () => {
   await chrome.storage.sync.set({ showRecentlyClosed: recentlyClosedToggle.checked });
   showResultsStatus();
+});
+
+duplicateTabsToggle.addEventListener("change", async () => {
+  await chrome.storage.sync.set({
+    closeDuplicateTabsOnActivation: duplicateTabsToggle.checked
+  });
+  showDuplicatesStatus();
 });
 
 allFoldersToggle.addEventListener("change", async () => {
@@ -398,8 +469,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.showRecentlyClosed) {
     recentlyClosedToggle.checked = changes.showRecentlyClosed.newValue !== false;
   }
+  if (changes.closeDuplicateTabsOnActivation) {
+    duplicateTabsToggle.checked = changes.closeDuplicateTabsOnActivation.newValue === true;
+  }
   if (changes.arcSetupCompleted) {
     updateArcSetup(changes.arcSetupCompleted.newValue);
+  }
+  if (changes.resultSectionOrder) {
+    renderResultSectionOrder(changes.resultSectionOrder.newValue);
   }
   if (changes.favoriteFolderIds) {
     favoriteFolderIds = Array.isArray(changes.favoriteFolderIds.newValue)
