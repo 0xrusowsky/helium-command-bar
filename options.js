@@ -20,20 +20,18 @@ const allFoldersToggle = document.querySelector("#all-favorite-folders");
 const folderOptions = document.querySelector("#favorite-folder-options");
 const folderList = document.querySelector("#favorite-folder-list");
 const choices = [...document.querySelectorAll('input[name="defaultSplitMode"]')];
+const arcSetupStatus = document.querySelector("#arc-setup-status");
+const arcSetupCheckboxes = [...document.querySelectorAll("[data-setup-step]")];
+const heliumSettingButtons = [...document.querySelectorAll(".open-helium-setting")];
 const commandAssignments = document.querySelector("#command-assignments");
 const coreStatus = document.querySelector("#core-status");
 const coreSetupMessage = document.querySelector("#core-setup-message");
-const numberedCommandAssignments = document.querySelector("#numbered-command-assignments");
-const numberedStatus = document.querySelector("#numbered-status");
-const numberedSetupMessage = document.querySelector("#numbered-setup-message");
 const refreshCommandsButton = document.querySelector("#refresh-commands");
 const importCoreKarabinerLink = document.querySelector("#import-core-karabiner");
-const importNumberedKarabinerLink = document.querySelector("#import-numbered-karabiner");
 const openExtensionShortcutsButton = document.querySelector("#open-extension-shortcuts");
 const BLUR_PERMISSION = { origins: ["<all_urls>"] };
 const KARABINER_BASE_URL = "https://raw.githubusercontent.com/0xrusowsky/helium-command-bar/main/integrations";
 const CORE_KARABINER_RULE_URL = `${KARABINER_BASE_URL}/karabiner-core.json`;
-const NUMBERED_KARABINER_RULE_URL = `${KARABINER_BASE_URL}/karabiner-numbered-navigation.json`;
 const CORE_COMMANDS = Object.freeze({
   "open-command-bar": "Open command bar",
   "cycle-split-pane": "Switch split pane",
@@ -46,12 +44,6 @@ const CORE_SHORTCUTS = Object.freeze({
   "next-tab-block": "⌃⇧→",
   "previous-tab-block": "⌃⇧←"
 });
-const NUMBERED_COMMANDS = Object.freeze(Object.fromEntries(
-  Array.from({ length: 9 }, (_, index) => {
-    const number = index + 1;
-    return [`select-tab-block-${number}`, number === 9 ? "Last tab block" : `Tab block ${number}`];
-  })
-));
 let statusTimer;
 let blurStatusTimer;
 let resultsStatusTimer;
@@ -127,6 +119,25 @@ function collectBookmarkFolders(nodes) {
 
   for (const node of nodes || []) visit(node, 0, []);
   return folders;
+}
+
+function updateArcSetup(completedSteps) {
+  const completed = new Set(Array.isArray(completedSteps) ? completedSteps : []);
+  for (const checkbox of arcSetupCheckboxes) {
+    checkbox.checked = completed.has(checkbox.dataset.setupStep);
+    checkbox.closest(".setup-step")?.classList.toggle("completed", checkbox.checked);
+  }
+  const completedCount = arcSetupCheckboxes.filter((checkbox) => checkbox.checked).length;
+  const setupComplete = completedCount === arcSetupCheckboxes.length;
+  arcSetupStatus.textContent = setupComplete ? "Complete" : `${completedCount} of ${arcSetupCheckboxes.length}`;
+  arcSetupStatus.classList.toggle("ready", setupComplete);
+  arcSetupStatus.classList.toggle("incomplete", !setupComplete);
+}
+
+function collectCompletedSetupSteps() {
+  return arcSetupCheckboxes
+    .filter((checkbox) => checkbox.checked)
+    .map((checkbox) => checkbox.dataset.setupStep);
 }
 
 function updateFolderAvailability() {
@@ -205,18 +216,8 @@ function renderCommandAssignments(container, definitions, commandsByName, expect
   }));
 }
 
-function numberedShortcut(name) {
-  return `⌥⇧${name.slice(-1)}`;
-}
-
 function matchesExpectedShortcut(actual, expected) {
-  if (actual === expected) return true;
-  const number = expected.slice(-1);
-  const normalized = actual.toLocaleLowerCase().replaceAll(" ", "");
-  const hasOption = actual.includes("⌥") || normalized.includes("option") || normalized.includes("alt");
-  const hasShift = actual.includes("⇧") || normalized.includes("shift");
-  const hasUnexpectedModifier = actual.includes("⌃") || actual.includes("⌘") || normalized.includes("ctrl") || normalized.includes("command");
-  return hasOption && hasShift && !hasUnexpectedModifier && normalized.endsWith(number);
+  return actual === expected;
 }
 
 function setKarabinerImportLink(link, url, enabled = true) {
@@ -229,7 +230,7 @@ function setKarabinerImportLink(link, url, enabled = true) {
     link.removeAttribute("href");
     link.classList.add("disabled");
     link.setAttribute("aria-disabled", "true");
-    link.title = "Assign all nine Option-Shift shortcuts first";
+    link.title = "Assign the expected extension shortcuts first";
   }
 }
 
@@ -239,7 +240,6 @@ async function refreshCommandAssignments() {
     const commands = await chrome.commands.getAll();
     const byName = new Map(commands.map((command) => [command.name, command]));
     renderCommandAssignments(commandAssignments, CORE_COMMANDS, byName, (name) => CORE_SHORTCUTS[name]);
-    renderCommandAssignments(numberedCommandAssignments, NUMBERED_COMMANDS, byName, numberedShortcut);
 
     const coreReadyCount = Object.keys(CORE_COMMANDS).filter((name) => {
       const shortcut = byName.get(name)?.shortcut;
@@ -253,27 +253,11 @@ async function refreshCommandAssignments() {
       ? "All four bridge shortcuts match the core Karabiner mappings."
       : "Assign the expected shortcuts shown above before importing the core Karabiner rules. Existing custom assignments are not overwritten.";
     setKarabinerImportLink(importCoreKarabinerLink, CORE_KARABINER_RULE_URL, coreReady);
-
-    const readyCount = Object.keys(NUMBERED_COMMANDS).filter((name) => {
-      const shortcut = byName.get(name)?.shortcut;
-      return shortcut && matchesExpectedShortcut(shortcut, numberedShortcut(name));
-    }).length;
-    const numberedReady = readyCount === Object.keys(NUMBERED_COMMANDS).length;
-    numberedStatus.textContent = numberedReady ? "Ready" : `${readyCount} of 9 ready`;
-    numberedStatus.classList.toggle("ready", numberedReady);
-    numberedStatus.classList.toggle("incomplete", !numberedReady);
-    numberedSetupMessage.textContent = numberedReady
-      ? "All bridge shortcuts match. You can safely import and enable numbered navigation in Karabiner-Elements."
-      : "Assign Option-Shift-1 through Option-Shift-9 to the matching commands before importing the numbered Karabiner rule. Native Command-1 through Command-9 remain unchanged until then.";
-    setKarabinerImportLink(importNumberedKarabinerLink, NUMBERED_KARABINER_RULE_URL, numberedReady);
   } catch (error) {
     const message = error.message || "Could not read extension shortcuts.";
     commandAssignments.textContent = message;
-    numberedCommandAssignments.textContent = message;
     coreStatus.textContent = "Unavailable";
-    numberedStatus.textContent = "Unavailable";
     setKarabinerImportLink(importCoreKarabinerLink, CORE_KARABINER_RULE_URL, false);
-    setKarabinerImportLink(importNumberedKarabinerLink, NUMBERED_KARABINER_RULE_URL, false);
   } finally {
     refreshCommandsButton.disabled = false;
   }
@@ -285,9 +269,11 @@ const stored = await chrome.storage.sync.get({
   blurInactiveSplitPane: false,
   showFavorites: true,
   showRecentlyClosed: true,
-  favoriteFolderIds: null
+  favoriteFolderIds: null,
+  arcSetupCompleted: []
 });
 selectMode(stored.defaultSplitMode);
+updateArcSetup(stored.arcSetupCompleted);
 setThemeColor(stored.commandBarColor);
 favoritesToggle.checked = stored.showFavorites !== false;
 recentlyClosedToggle.checked = stored.showRecentlyClosed !== false;
@@ -305,6 +291,18 @@ refreshCommandsButton.addEventListener("click", () => void refreshCommandAssignm
 openExtensionShortcutsButton.addEventListener("click", () => {
   void chrome.tabs.create({ url: "helium://extensions/shortcuts" });
 });
+for (const button of heliumSettingButtons) {
+  button.addEventListener("click", () => {
+    void chrome.tabs.create({ url: button.dataset.settingsUrl });
+  });
+}
+for (const checkbox of arcSetupCheckboxes) {
+  checkbox.addEventListener("change", async () => {
+    const arcSetupCompleted = collectCompletedSetupSteps();
+    updateArcSetup(arcSetupCompleted);
+    await chrome.storage.sync.set({ arcSetupCompleted });
+  });
+}
 
 themeColorInput.addEventListener("input", () => setThemeColor(themeColorInput.value));
 themeColorInput.addEventListener("change", () => void saveThemeColor(themeColorInput.value));
@@ -399,6 +397,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
   if (changes.showRecentlyClosed) {
     recentlyClosedToggle.checked = changes.showRecentlyClosed.newValue !== false;
+  }
+  if (changes.arcSetupCompleted) {
+    updateArcSetup(changes.arcSetupCompleted.newValue);
   }
   if (changes.favoriteFolderIds) {
     favoriteFolderIds = Array.isArray(changes.favoriteFolderIds.newValue)

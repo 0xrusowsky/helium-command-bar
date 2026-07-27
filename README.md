@@ -28,12 +28,11 @@ Chromium will not automatically assign an extension directly to its built-in **C
 
 ## Keyboard navigation and Karabiner-Elements
 
-The extension includes commands to switch split panes, move to the next or previous tab block, and select tab blocks 1–9. A normal tab is one block and every split is one block, so block navigation never stops on the other pane of the current split. Entering a split restores its last-focused pane.
+The extension includes commands to switch split panes and move to the next or previous tab block. A normal tab is one block and every split is one block, so block navigation never stops on the other pane of the current split. Entering a split restores its last-focused pane.
 
-Open the extension's **Options** page to inspect active command assignments and import the repository's Karabiner-Elements rules. The rules are split into two files so native numbered navigation is never intercepted before its extension bridges are ready:
+Control-Tab navigation opens a centered, input-free tab viewer showing every open block in the current window in tab-strip order. Without releasing Control, press Tab and Shift-Tab in any order to move forward and backward through the selection. The viewer uses the command bar's color theme, remains open for as long as Control is held, and switches only when Control is released, Enter is pressed, or a row is clicked. Hover or select a tab and press **D**, **Delete**, or **Backspace** to close it without dismissing the viewer. Escape cancels. Protected browser pages that reject extension injection retain immediate block navigation without the viewer.
 
-- [`integrations/karabiner-core.json`](integrations/karabiner-core.json) provides **Command + T** for the command bar, **Option + T** for Helium's native new-split command, **Control + Tab** / **Control + Shift + Tab** for block navigation, and **Control + H/L** for split-pane switching.
-- [`integrations/karabiner-numbered-navigation.json`](integrations/karabiner-numbered-navigation.json) optionally maps **Command + 1–9** to split-aware numbered block commands.
+Open the extension's **Options** page to inspect active command assignments and import [`integrations/karabiner-core.json`](integrations/karabiner-core.json). It provides **Command + T** for the command bar, **Option + T** for Helium's native new-split command, **Control + Tab** / **Control + Shift + Tab** for block navigation, **Control + J/K** as next/previous aliases, and **Control + H/L** for split-pane switching. It does not intercept numbered shortcuts, leaving them available for profile navigation and Helium's native behavior.
 
 Karabiner asks which rules to enable and scopes all of them to Helium's `net.imput.helium` bundle ID. The four core extension bridges have manifest defaults, so they normally require no manual shortcut setup.
 
@@ -45,7 +44,6 @@ Command + T → Karabiner → Command + Shift + Space → Open command bar
 
 This makes **Command + T** the default user-facing command without relying on Chromium to assign a protected browser shortcut. Enabling the rule replaces Helium's normal new-tab behavior; use the command bar to open a URL or search instead.
 
-Chromium permits only four suggested shortcuts per extension, so numbered commands remain unassigned by default. Assign **Option + Shift + 1–9** under `helium://extensions/shortcuts`; the Options page enables the numbered Karabiner import only after all nine exact bridge shortcuts are detected. Until then, native **Command + 1–9** remains untouched.
 
 ### Migrating from Split Block Navigation
 
@@ -70,6 +68,7 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Split views are always selected as one block first. Press **Right Arrow** to enter individual tab navigation and **Left Arrow** to return to the complete group. Compact mode also expands and collapses the visual rows; expanded mode keeps both rows visible while entering or exiting their navigation. A search matching either pane keeps both entries visible.
 - Recently closed results are marked **Restore**; selecting one restores the tab or closed window.
 - Press **Up/Down** to select an item and **Enter** to activate or restore it.
+- Press **Control + Tab** or **Control + Shift + Tab** to open the tab viewer, cycle through split-aware blocks, and switch when Control is released.
 - As soon as you type, opening the URL or searching with the default search engine is always the first selected option.
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
@@ -100,6 +99,8 @@ This remains a single-keybind workflow: the keybind belongs to Helium's native c
 ## Settings
 
 Open the extension's **Options** page by right-clicking its toolbar icon, or from its details page on `chrome://extensions`.
+
+The **Arc-like Helium setup** checklist links directly to Helium's protected startup and appearance settings. It guides users through restoring their workspace and enabling frameless mode with the vertical sidebar. The extension cannot inspect or change those browser-owned preferences, so completion marks are user-confirmed and stored in extension sync storage.
 
 The **Command bar color** setting accepts any color and includes Neutral, Purple, Blue, Green, and Orange presets. Neutral black/gray (`#505156`) is the default and colors both the regular command bar and enhanced split picker.
 

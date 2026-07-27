@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   Direction,
   buildTabBlocks,
+  getAdjacentBlockIndex,
   getBlockNavigationTarget,
-  getIndexedBlockTarget,
   getSplitPaneCycleTarget,
   isSplitTab,
   setRememberedTabId,
@@ -87,6 +87,28 @@ test("block navigation wraps in both directions", () => {
   assert.equal(getBlockNavigationTarget(tabs, 1, Direction.PREVIOUS)?.id, 3);
 });
 
+test("an open viewer supports arbitrary next and previous movement", () => {
+  const blocks = buildTabBlocks([
+    tab(1, 0),
+    tab(2, 1, { splitViewId: 10 }),
+    tab(3, 2, { splitViewId: 10 }),
+    tab(4, 3),
+  ]);
+  let selectedKey = null;
+
+  function move(direction) {
+    const index = getAdjacentBlockIndex(blocks, 1, selectedKey, direction);
+    selectedKey = blocks[index].key;
+    return blocks[index].members.map((member) => member.id);
+  }
+
+  assert.deepEqual(move(Direction.NEXT), [2, 3]);
+  assert.deepEqual(move(Direction.NEXT), [4]);
+  assert.deepEqual(move(Direction.PREVIOUS), [2, 3]);
+  assert.deepEqual(move(Direction.PREVIOUS), [1]);
+  assert.deepEqual(move(Direction.PREVIOUS), [4]);
+});
+
 test("entering a split defaults to its leftmost member", () => {
   const tabs = [
     tab(1, 0),
@@ -125,53 +147,6 @@ test("a stale remembered member falls back to the leftmost member", () => {
     getBlockNavigationTarget(tabs, 1, Direction.NEXT, focusState)?.id,
     2,
   );
-});
-
-test("numbered navigation counts a split as one block", () => {
-  const tabs = [
-    tab(1, 0),
-    tab(2, 1, { splitViewId: 10 }),
-    tab(3, 2, { splitViewId: 10 }),
-    tab(4, 3),
-  ];
-
-  assert.equal(getIndexedBlockTarget(tabs, 1, 1)?.id, 1);
-  assert.equal(getIndexedBlockTarget(tabs, 1, 2)?.id, 2);
-  assert.equal(getIndexedBlockTarget(tabs, 1, 3)?.id, 4);
-});
-
-test("numbered navigation restores the remembered split member", () => {
-  const tabs = [
-    tab(1, 0),
-    tab(2, 1, { splitViewId: 10 }),
-    tab(3, 2, { splitViewId: 10 }),
-  ];
-  const focusState = {};
-  setRememberedTabId(focusState, 1, 10, 3);
-
-  assert.equal(getIndexedBlockTarget(tabs, 1, 2, focusState)?.id, 3);
-});
-
-test("numbered navigation preserves focus inside the active split block", () => {
-  const tabs = [
-    tab(1, 0),
-    tab(2, 1, { splitViewId: 10 }),
-    tab(3, 2, { splitViewId: 10 }),
-  ];
-
-  assert.equal(getIndexedBlockTarget(tabs, 3, 2)?.id, 3);
-});
-
-test("block 9 selects the last block and unavailable numbered blocks do nothing", () => {
-  const tabs = [
-    tab(1, 0),
-    tab(2, 1, { splitViewId: 10 }),
-    tab(3, 2, { splitViewId: 10 }),
-    tab(4, 3),
-  ];
-
-  assert.equal(getIndexedBlockTarget(tabs, 1, 9)?.id, 4);
-  assert.equal(getIndexedBlockTarget(tabs, 1, 8), null);
 });
 
 test("pane commands cycle in either direction within a two-pane split", () => {
@@ -249,15 +224,11 @@ test("rejects unsupported navigation directions", () => {
     /Unsupported navigation direction/,
   );
   assert.throws(
-    () => getSplitPaneCycleTarget([tab(1, 0)], 1, 0),
+    () => getAdjacentBlockIndex(buildTabBlocks([tab(1, 0)]), 1, null, 0),
     /Unsupported navigation direction/,
   );
   assert.throws(
-    () => getIndexedBlockTarget([tab(1, 0)], 1, 0),
-    /Unsupported tab block number/,
-  );
-  assert.throws(
-    () => getIndexedBlockTarget([tab(1, 0)], 1, 10),
-    /Unsupported tab block number/,
+    () => getSplitPaneCycleTarget([tab(1, 0)], 1, 0),
+    /Unsupported navigation direction/,
   );
 });

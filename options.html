@@ -151,6 +151,47 @@
         <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects pointer-events-free ring and blur layers. Protected browser pages cannot be highlighted or blurred.</p>
       </section>
 
+      <section aria-labelledby="arc-setup-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="arc-setup-heading">Arc-like Helium setup</h2>
+            <p>Use this checklist to configure Helium's native settings. The extension opens each protected settings page, but only you can apply the change.</p>
+          </div>
+          <span id="arc-setup-status" class="setup-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <div class="setup-checklist">
+          <article class="setup-step">
+            <span class="step-number" aria-hidden="true">1</span>
+            <div class="step-content">
+              <strong>Restore your workspace</strong>
+              <p>Choose <b>Continue where you left off</b>, then quit Helium with Command-Q while its windows are open.</p>
+            </div>
+            <button class="secondary-button open-helium-setting" type="button" data-settings-url="helium://settings/onStartup">Open startup settings</button>
+            <label class="setup-complete">
+              <input type="checkbox" data-setup-step="restore-workspace">
+              Done
+            </label>
+          </article>
+
+          <article class="setup-step">
+            <span class="step-number" aria-hidden="true">2</span>
+            <div class="step-content">
+              <strong>Enable frameless mode and the vertical sidebar</strong>
+              <p>Open Appearance &amp; behavior, enable frameless mode, and choose the vertical sidebar layout for an Arc-like window.</p>
+            </div>
+            <button class="secondary-button open-helium-setting" type="button" data-settings-url="helium://settings/appearance">Open appearance settings</button>
+            <label class="setup-complete">
+              <input type="checkbox" data-setup-step="frameless-vertical-layout">
+              Done
+            </label>
+          </article>
+
+        </div>
+
+        <p class="permission-note">Completion marks are stored by this extension and do not verify Helium's protected preferences.</p>
+      </section>
+
       <section aria-labelledby="keyboard-heading">
         <div class="section-heading">
           <div>
@@ -165,7 +206,7 @@
         <div class="karabiner-setup">
           <div>
             <strong>Use Command-T for the command bar</strong>
-            <p>Import the core mappings to translate Command-T to the extension's Command-Shift-Space bridge, plus Option-T, Ctrl-Tab, Ctrl-Shift-Tab, and Ctrl-H/L. Each rule remains opt-in inside Karabiner-Elements.</p>
+            <p>Import the core mappings to translate Command-T to the extension's Command-Shift-Space bridge, plus Option-T, Ctrl-Tab, Ctrl-Shift-Tab, Ctrl-J/K aliases, and Ctrl-H/L. Each rule remains opt-in inside Karabiner-Elements.</p>
           </div>
           <a id="import-core-karabiner" class="primary-button disabled" aria-disabled="true">Import core shortcuts</a>
         </div>
@@ -175,24 +216,7 @@
           <p id="core-setup-message" class="permission-note"></p>
         </div>
         <p class="permission-note">Chromium cannot automatically assign an extension to its protected Command-T shortcut, so Karabiner provides the user-facing default without manual extension configuration. Command-T replaces Helium's normal new-tab behavior when enabled; Option-T continues to create a native split.</p>
-
-        <div class="advanced-navigation">
-          <div class="section-heading advanced-heading">
-            <div>
-              <h3>Advanced numbered navigation</h3>
-              <p>Make Command-1 through Command-8 select that tab block and Command-9 select the final block. Every split counts as one block.</p>
-            </div>
-            <span id="numbered-status" class="setup-status" role="status" aria-live="polite"></span>
-          </div>
-
-          <div id="numbered-command-assignments" class="command-assignments numbered-assignments" aria-live="polite"></div>
-
-          <p id="numbered-setup-message" class="permission-note"></p>
-          <div class="advanced-actions">
-            <button id="open-extension-shortcuts" class="secondary-button" type="button">Open extension shortcuts</button>
-            <a id="import-numbered-karabiner" class="primary-button disabled" aria-disabled="true">Import numbered shortcuts</a>
-          </div>
-        </div>
+        <button id="open-extension-shortcuts" class="secondary-button keyboard-shortcuts-button" type="button">Open extension shortcuts</button>
       </section>
     </main>
 

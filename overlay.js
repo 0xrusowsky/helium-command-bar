@@ -130,6 +130,16 @@
     return defaultSplitExpanded || splitNavigationKeys.has(splitKey);
   }
 
+  function focusCommandBar() {
+    if (!root.isConnected) return;
+    // Browser-owned controls such as the find bar can retain the native Views
+    // focus even after a renderer input becomes document.activeElement.
+    // Request both window and element focus, then retry after the command event
+    // and asynchronous overlay setup have finished.
+    window.focus();
+    queryInput.focus({ preventScroll: true });
+  }
+
   function closeCommandBar() {
     void chrome.runtime.sendMessage({
       type: "helium-command-bar:close-overlay",
@@ -746,5 +756,8 @@
 
   rows = initial.rows;
   renderRows();
-  queryInput.focus();
+  focusCommandBar();
+  for (const delay of [0, 50, 150, 300]) {
+    setTimeout(focusCommandBar, delay);
+  }
 })();

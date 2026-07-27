@@ -620,6 +620,18 @@ async function openAnchoredFallback(tab) {
 async function openCommandBar(tab) {
   if (!tab?.id) return;
 
+  // Reassert the active browser window and tab before injecting. This gives
+  // the page a chance to reclaim native focus from browser-owned controls such
+  // as the find bar; the overlay follows up by focusing its query input.
+  try {
+    if (Number.isInteger(tab.windowId)) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    }
+    await chrome.tabs.update(tab.id, { active: true });
+  } catch {
+    // The invocation can still succeed if the window or tab changed mid-flight.
+  }
+
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },

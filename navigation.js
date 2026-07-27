@@ -56,6 +56,32 @@ export function findBlockIndex(blocks, tabId) {
   );
 }
 
+/**
+ * Advances an in-progress tab-viewer selection. Once a block is selected, its
+ * position—not the still-active origin tab—is the base for either direction.
+ */
+export function getAdjacentBlockIndex(
+  blocks,
+  activeTabId,
+  selectedBlockKey,
+  direction,
+) {
+  if (direction !== Direction.NEXT && direction !== Direction.PREVIOUS) {
+    throw new TypeError(`Unsupported navigation direction: ${direction}`);
+  }
+  if (!blocks.length) return -1;
+
+  const selectedIndex = selectedBlockKey
+    ? blocks.findIndex((block) => block.key === selectedBlockKey)
+    : -1;
+  const baseIndex = selectedIndex === -1
+    ? findBlockIndex(blocks, activeTabId)
+    : selectedIndex;
+  if (baseIndex === -1) return -1;
+
+  return (baseIndex + direction + blocks.length) % blocks.length;
+}
+
 function focusStateKey(windowId, splitViewId) {
   return `${windowId}:${splitViewId}`;
 }
@@ -124,36 +150,6 @@ export function getBlockNavigationTarget(
   const targetBlockIndex =
     (currentBlockIndex + direction + blocks.length) % blocks.length;
   return selectBlockMember(blocks[targetBlockIndex], lastFocusedBySplit);
-}
-
-/**
- * Returns a numbered block using Chromium's conventional semantics: 1–8 select
- * that exact block and 9 selects the final block. A split counts as one block.
- */
-export function getIndexedBlockTarget(
-  tabs,
-  activeTabId,
-  blockNumber,
-  lastFocusedBySplit = {},
-  splitViewIdNone = -1,
-) {
-  if (!Number.isInteger(blockNumber) || blockNumber < 1 || blockNumber > 9) {
-    throw new TypeError(`Unsupported tab block number: ${blockNumber}`);
-  }
-
-  const blocks = buildTabBlocks(tabs, splitViewIdNone);
-  const targetBlockIndex = blockNumber === 9 ? blocks.length - 1 : blockNumber - 1;
-  const targetBlock = blocks[targetBlockIndex];
-  if (!targetBlock) {
-    return null;
-  }
-
-  // Selecting the block that is already active must not unexpectedly move
-  // focus to a different member of the same split.
-  const activeMember = targetBlock.members.find(
-    (member) => member.id === activeTabId,
-  );
-  return activeMember ?? selectBlockMember(targetBlock, lastFocusedBySplit);
 }
 
 /**

@@ -19,6 +19,23 @@
       ]
     },
     {
+      "description": "Use Ctrl-J and Ctrl-K as next and previous tab-block aliases in Helium",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": { "key_code": "j", "modifiers": { "mandatory": ["control"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "right_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        },
+        {
+          "type": "basic",
+          "from": { "key_code": "k", "modifiers": { "mandatory": ["control"], "optional": ["caps_lock"] } },
+          "to": [{ "key_code": "left_arrow", "modifiers": ["control", "shift"] }],
+          "conditions": [{ "type": "frontmost_application_if", "bundle_identifiers": ["^net\\.imput\\.helium$"] }]
+        }
+      ]
+    },
+    {
       "description": "Use Ctrl-H and Ctrl-L to switch split panes in Helium",
       "manipulators": [
         {

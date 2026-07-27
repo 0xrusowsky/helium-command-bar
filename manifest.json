@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Helium Command Bar",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Search tabs, create splits, and navigate Helium's split-aware tab blocks from the keyboard.",
   "minimum_chrome_version": "109",
   "permissions": [
@@ -68,16 +68,7 @@
         "mac": "MacCtrl+Shift+Left"
       },
       "description": "Focus the previous tab block"
-    },
-    "select-tab-block-1": { "description": "Focus tab block 1" },
-    "select-tab-block-2": { "description": "Focus tab block 2" },
-    "select-tab-block-3": { "description": "Focus tab block 3" },
-    "select-tab-block-4": { "description": "Focus tab block 4" },
-    "select-tab-block-5": { "description": "Focus tab block 5" },
-    "select-tab-block-6": { "description": "Focus tab block 6" },
-    "select-tab-block-7": { "description": "Focus tab block 7" },
-    "select-tab-block-8": { "description": "Focus tab block 8" },
-    "select-tab-block-9": { "description": "Focus the last tab block" }
+    }
   },
   "icons": {
     "16": "icons/icon-16.png",
