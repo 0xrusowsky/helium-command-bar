@@ -730,6 +730,12 @@ async function openCommandBar(tab) {
 
 chrome.runtime.onMessage.addListener((message, sender) => handleOverlayMessage(message, sender));
 
+chrome.runtime.onStartup.addListener(() => {
+  void checkForExtensionUpdate({ force: true }).catch((error) => {
+    console.info("Could not check for an extension update at startup", error);
+  });
+});
+
 chrome.action.onClicked.addListener(openCommandBar);
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "open-command-bar") return;

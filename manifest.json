@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Helium Command Bar",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Search tabs, create splits, and navigate Helium's split-aware tab blocks from the keyboard.",
   "homepage_url": "https://github.com/0xrusowsky/helium-command-bar",
   "minimum_chrome_version": "109",
