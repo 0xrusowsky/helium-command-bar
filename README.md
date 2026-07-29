@@ -34,7 +34,7 @@ Control-Tab navigation opens a centered, input-free tab viewer showing every ope
 
 Open the extension's **Options** page to inspect active command assignments and import [`integrations/karabiner-core.json`](integrations/karabiner-core.json). It provides **Command + T** for the command bar, **Option + T** for Helium's native new-split command, **Control + Tab** / **Control + Shift + Tab** for block navigation, **Control + J/K** as next/previous aliases, and **Control + H/L** for split-pane switching. It does not intercept numbered shortcuts, leaving them available for profile navigation and Helium's native behavior.
 
-Karabiner asks which rules to enable and scopes all of them to Helium's `net.imput.helium` bundle ID. The four core extension bridges have manifest defaults, so they normally require no manual shortcut setup.
+Karabiner asks which rules to enable and scopes all of them to Helium's `net.imput.helium` bundle ID. Chromium allows more than four commands but installs at most four suggested shortcuts, so open `helium://extensions/shortcuts` and manually assign **Control + Shift + Down** to the fifth command, **Previous split pane**. The core Karabiner rules then map **Control + H** to that bridge and **Control + L** to the default **Control + Shift + Up** next-pane bridge.
 
 The recommended macOS command-bar workflow is:
 
@@ -47,7 +47,7 @@ This makes **Command + T** the default user-facing command without relying on Ch
 
 ### Migrating from Split Block Navigation
 
-Disable the standalone **Split Block Navigation** extension before configuring this unified extension; otherwise it may continue to own the same bridge shortcuts. Reload Helium Command Bar, open its Options page, and confirm that all four core rows show the expected shortcuts before importing the core Karabiner rules. Existing custom assignments are never overwritten automatically.
+Disable the standalone **Split Block Navigation** extension before configuring this unified extension; otherwise it may continue to own the same bridge shortcuts. Reload Helium Command Bar, assign **Control + Shift + Down** to **Previous split pane**, then open its Options page and confirm that all five core rows show the expected shortcuts before importing the core Karabiner rules. Existing custom assignments are never overwritten automatically.
 
 ## Important limitation
 
@@ -73,8 +73,9 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
-- Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`.
-- Open Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Searching for their destination shows the dedicated icon and focuses the existing tab instead of opening a duplicate.
+- Type **Helium Command Bar settings** (or **extension options**) to open this extension's settings directly. Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`.
+- Once per day, using any extension shortcut checks whether the unpacked extension files contain a newer manifest version. When they do, **Update extension** appears as the command bar's first option and reloads the extension—the same action as the reload button on `helium://extensions`.
+- Open extension settings, browser Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Searching for their destination shows the dedicated icon and focuses the existing tab instead of opening a duplicate.
 
 Bare domains such as `example.com`, localhost URLs, IP addresses, and explicit `http://` or `https://` URLs are opened directly. Other text is sent to the browser's default search provider.
 
@@ -106,7 +107,9 @@ The **Command bar color** setting accepts any color and includes Neutral, Purple
 
 The **Result sections** settings let you reorder **Open tabs**, **Bookmarks**, and **Recently closed**, so favorites can appear before open tabs. You can also independently show or hide **Bookmarks** and **Recently closed**. Bookmarks can include all bookmark folders or a selected set of folders; selecting a parent folder selects its current descendants.
 
-The optional **Silently close duplicate tabs** setting cleans up duplicate tabs across all windows whenever the command bar opens. Matching is exact and includes the complete query string and fragment. The tab where the command bar was invoked is preserved; for unrelated duplicate groups, pinned, active, and most recently accessed tabs are preferred in that order.
+The optional **Silently close duplicate tabs** setting cleans up duplicate tabs across all windows whenever an extension shortcut is used. Matching is exact and includes the complete query string and fragment. The focused tab is preserved; for unrelated duplicate groups, pinned, active, and most recently accessed tabs are preferred in that order.
+
+The optional **Silently close unfocused New Tab tabs** setting removes unused New Tab pages on the same shortcut activations while always preserving the currently focused tab.
 
 The **Default split view appearance** setting controls whether splits initially open in:
 
@@ -126,6 +129,14 @@ Run the pure search/URL tests with:
 ```sh
 npm test
 ```
+
+Build a tested Chrome Web Store ZIP with:
+
+```sh
+npm run package
+```
+
+The archive is written to `dist/` from an explicit runtime-file allowlist. Store listing copy, reviewer instructions, asset requirements, and the release checklist are in [`store/`](store/). See [`PRIVACY.md`](PRIVACY.md) for the extension privacy policy.
 
 ## Permissions
 

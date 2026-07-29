@@ -6,17 +6,22 @@ import {
   isSplitTab,
   selectBlockMember,
   setRememberedTabId,
+  sortTabBlocksByRecentUse,
+  unfocusedNewTabIds,
 } from "./navigation.js";
 import {
   DEFAULT_COMMAND_BAR_COLOR,
   normalizeThemeColor,
 } from "./theme.js";
+import { duplicateTabIds } from "./search.js";
+import { checkForExtensionUpdate } from "./update.js";
 
 const FOCUS_STATE_KEY = "lastFocusedBySplit";
 const SPLIT_VIEW_ID_NONE = chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1;
 
 const COMMANDS = Object.freeze({
   "cycle-split-pane": { type: "pane", value: Direction.NEXT },
+  "previous-split-pane": { type: "pane", value: Direction.PREVIOUS },
   "next-tab-block": { type: "block", value: Direction.NEXT },
   "previous-tab-block": { type: "block", value: Direction.PREVIOUS },
 });
@@ -49,6 +54,23 @@ async function rememberFocusedSplitTab(tab) {
   await mutateFocusState((state) => {
     setRememberedTabId(state, tab.windowId, tab.splitViewId, tab.id);
   });
+}
+
+async function cleanUpTabs(preferredTabId) {
+  const [tabs, settings] = await Promise.all([
+    chrome.tabs.query({}),
+    chrome.storage.sync.get({
+      closeDuplicateTabsOnActivation: false,
+      closeNewTabsOnActivation: false,
+    }),
+  ]);
+  const tabIds = new Set(
+    settings.closeNewTabsOnActivation ? unfocusedNewTabIds(tabs) : [],
+  );
+  if (settings.closeDuplicateTabsOnActivation) {
+    for (const tabId of duplicateTabIds(tabs, preferredTabId)) tabIds.add(tabId);
+  }
+  if (tabIds.size) await chrome.tabs.remove([...tabIds]);
 }
 
 async function getActiveWindowTabs() {
@@ -121,7 +143,9 @@ async function commitViewerSession(windowId, sessionId) {
   await hideViewer(session);
 
   const tabs = await chrome.tabs.query({ windowId });
-  const blocks = buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE);
+  const blocks = sortTabBlocksByRecentUse(
+    buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE),
+  );
   const selectedBlock = blocks.find((block) => block.key === session.selectedBlockKey);
   if (!selectedBlock) return;
 
@@ -136,7 +160,9 @@ async function closeViewerSelection(windowId, sessionId) {
   if (!session || session.id !== sessionId) return;
 
   const tabs = await chrome.tabs.query({ windowId });
-  const blocks = buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE);
+  const blocks = sortTabBlocksByRecentUse(
+    buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE),
+  );
   const selectedIndex = blocks.findIndex(
     (block) => block.key === session.selectedBlockKey,
   );
@@ -152,7 +178,9 @@ async function closeViewerSelection(windowId, sessionId) {
   if (closesOrigin || !viewerSessions.has(windowId)) return;
 
   const remainingTabs = await chrome.tabs.query({ windowId });
-  const remainingBlocks = buildTabBlocks(remainingTabs, SPLIT_VIEW_ID_NONE);
+  const remainingBlocks = sortTabBlocksByRecentUse(
+    buildTabBlocks(remainingTabs, SPLIT_VIEW_ID_NONE),
+  );
   if (!remainingBlocks.length) {
     await cancelViewerSession(windowId, sessionId);
     return;
@@ -195,7 +223,9 @@ async function showViewer(session, blocks, focusState) {
 
 async function runBlockViewer(direction, context, focusState) {
   const { activeTab, tabs } = context;
-  const blocks = buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE);
+  const blocks = sortTabBlocksByRecentUse(
+    buildTabBlocks(tabs, SPLIT_VIEW_ID_NONE),
+  );
   if (!blocks.length) return;
 
   let session = viewerSessions.get(activeTab.windowId);
@@ -235,7 +265,19 @@ async function runCommand(commandName) {
   const command = COMMANDS[commandName];
   if (!command) return;
 
-  const context = await getActiveWindowTabs();
+  let context = await getActiveWindowTabs();
+  if (!context) return;
+
+  try {
+    await checkForExtensionUpdate();
+    await cleanUpTabs(context.activeTab.id);
+  } catch (error) {
+    // Cleanup should never prevent the requested navigation.
+    console.info("Could not clean up tabs", error);
+  }
+
+  // Cleanup can remove tabs from the active window, so refresh navigation data.
+  context = await getActiveWindowTabs();
   if (!context) return;
 
   const { activeTab, tabs } = context;

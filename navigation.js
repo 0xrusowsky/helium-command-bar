@@ -3,6 +3,20 @@ export const Direction = Object.freeze({
   NEXT: 1,
 });
 
+export function unfocusedNewTabIds(tabs) {
+  return tabs
+    .filter((tab) => {
+      if (tab.active || tab.id === undefined) return false;
+      const url = (tab.pendingUrl || tab.url || "").trim().toLocaleLowerCase();
+      if (/^(?:helium|chrome):\/\/(?:newtab|new-tab)(?:\/|[?#]|$)/.test(url)) {
+        return true;
+      }
+      if (url === "about:newtab") return true;
+      return !url && (tab.title || "").trim().toLocaleLowerCase() === "new tab";
+    })
+    .map((tab) => tab.id);
+}
+
 export function isSplitTab(tab, splitViewIdNone = -1) {
   return (
     tab?.splitViewId !== undefined &&
@@ -48,6 +62,22 @@ export function buildTabBlocks(tabs, splitViewIdNone = -1) {
       members: block.members.sort(compareTabs),
     }))
     .sort((left, right) => left.index - right.index);
+}
+
+/** Sorts navigation blocks by their most recently accessed member. */
+export function sortTabBlocksByRecentUse(blocks) {
+  const lastAccessed = (block) => Math.max(
+    0,
+    ...block.members.map((member) => member.lastAccessed || 0),
+  );
+
+  const isActive = (block) => block.members.some((member) => member.active);
+
+  return [...blocks].sort((left, right) =>
+    Number(isActive(right)) - Number(isActive(left)) ||
+    lastAccessed(right) - lastAccessed(left) ||
+    left.index - right.index,
+  );
 }
 
 export function findBlockIndex(blocks, tabId) {

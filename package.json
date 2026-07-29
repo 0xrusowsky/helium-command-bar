@@ -1,9 +1,11 @@
 {
   "name": "helium-command-bar",
-  "version": "0.22.0",
+  "version": "0.24.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "package": "bash scripts/package.sh",
+    "store-assets": "bash scripts/store-assets.sh"
   }
 }

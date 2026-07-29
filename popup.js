@@ -19,6 +19,7 @@ import {
   DEFAULT_COMMAND_BAR_COLOR,
   applyCommandBarTheme
 } from "./theme.js";
+import { getExtensionUpdateState } from "./update.js";
 
 const queryInput = document.querySelector("#query");
 const resultsElement = document.querySelector("#results");
@@ -33,6 +34,7 @@ let allTabs = [];
 let invokingTabId = null;
 let allBookmarks = [];
 let recentlyClosedSessions = [];
+let updateState = null;
 let rows = [];
 let navigationItems = [];
 let selectedIndex = 0;
@@ -113,6 +115,14 @@ function updateRows({ resetSelection = false } = {}) {
       }))
     : [{ kind: "tab", tab: block.members[0] }]);
   const searchRows = [
+    ...(updateState?.updateAvailable ? [{
+      kind: "update",
+      setting: {
+        title: "Update extension",
+        description: `Reload version ${updateState.availableVersion}`,
+        icon: "settings"
+      }
+    }] : []),
     ...(launch ? [launch] : []),
     ...matchedSettings.map((setting) => ({
       kind: "setting",
@@ -654,10 +664,10 @@ function renderRows() {
     if (row.kind === "tab") element = makeTabRow(row, navigationItems.length);
     else if (row.kind === "bookmark") element = makeBookmarkRow(row, navigationItems.length);
     else if (row.kind === "closed") element = makeClosedRow(row, navigationItems.length);
-    else if (row.kind === "setting") element = makeSettingRow(row, navigationItems.length);
+    else if (row.kind === "setting" || row.kind === "update") element = makeSettingRow(row, navigationItems.length);
     else if (row.kind === "tab-action") element = makeTabActionRow(row, navigationItems.length);
     else element = makeLaunchRow(row, navigationItems.length);
-    const section = row.kind === "launch" || row.kind === "setting" || row.kind === "tab-action"
+    const section = row.kind === "launch" || row.kind === "setting" || row.kind === "update" || row.kind === "tab-action"
       ? sections.search
       : row.kind === "bookmark"
         ? sections.favorites
@@ -762,7 +772,8 @@ async function openSetting(setting, tab = null) {
   try {
     if (tab) await activateTab(tab);
     else {
-      await chrome.tabs.create({ url: setting.url, active: true });
+      if (setting.extensionOptions) await chrome.runtime.openOptionsPage();
+      else await chrome.tabs.create({ url: setting.url, active: true });
       closeCommandBar();
     }
   } catch (error) {
@@ -786,6 +797,8 @@ async function activateNavigationItem(index = selectedIndex) {
     await restoreSession(item.row.closed);
   } else if (item.row.kind === "setting") {
     await openSetting(item.row.setting, item.row.tab);
+  } else if (item.row.kind === "update") {
+    chrome.runtime.reload();
   } else if (item.row.kind === "tab-action") {
     await runTabAction(item.row);
   } else {
@@ -977,5 +990,6 @@ resultSectionOrder = normalizeResultSectionOrder(storedSettings.resultSectionOrd
 favoriteFolderIds = Array.isArray(storedSettings.favoriteFolderIds)
   ? storedSettings.favoriteFolderIds
   : null;
+updateState = await getExtensionUpdateState();
 await Promise.all([loadTabs(), loadBookmarks(), loadRecentlyClosed()]);
 queryInput.focus();

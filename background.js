@@ -26,6 +26,8 @@ import {
   DEFAULT_COMMAND_BAR_COLOR,
   commandBarThemeCss
 } from "./theme.js";
+import { unfocusedNewTabIds } from "./navigation.js";
+import { checkForExtensionUpdate, getExtensionUpdateState } from "./update.js";
 
 const NATIVE_SPLIT_PICKER_URL = "chrome://tab-search.top-chrome/split_new_tab_page.html";
 const VISUAL_PERMISSION = { origins: ["<all_urls>"] };
@@ -260,7 +262,7 @@ function tabForOverlay(tab) {
 
 async function queryRows(query, requesterTab) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions, bookmarks, css, settings] = await Promise.all([
+  const [tabs, sessions, bookmarks, css, settings, updateState] = await Promise.all([
     chrome.tabs.query({}),
     chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
     getBookmarks(),
@@ -273,7 +275,8 @@ async function queryRows(query, requesterTab) {
       showRecentlyClosed: true,
       favoriteFolderIds: null,
       resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
-    })
+    }),
+    getExtensionUpdateState()
   ]);
   const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
   const enabledBookmarks = settings.showFavorites === false ? [] : configuredBookmarks;
@@ -310,6 +313,14 @@ async function queryRows(query, requesterTab) {
       }))
     : [{ kind: "tab", tab: tabForOverlay(block.members[0]) }]);
   const searchRows = [
+    ...(updateState?.updateAvailable ? [{
+      kind: "update",
+      setting: {
+        title: "Update extension",
+        description: `Reload version ${updateState.availableVersion}`,
+        icon: "settings"
+      }
+    }] : []),
     ...(target ? [{ kind: "launch", target }] : []),
     ...matchedSettings.map((setting) => ({
       kind: "setting",
@@ -477,6 +488,10 @@ async function handleOverlayMessage(message, sender) {
     case "helium-command-bar:query":
       return queryRows(message.query, sender.tab);
 
+    case "helium-command-bar:reload-extension":
+      chrome.runtime.reload();
+      return { ok: true };
+
     case "helium-command-bar:close-overlay":
       await clearInactiveSplitBlur(
         sender.tab.id,
@@ -513,7 +528,11 @@ async function handleOverlayMessage(message, sender) {
         }
       }
 
-      await chrome.tabs.create({ url: setting.url, active: true, windowId: sender.tab.windowId });
+      if (setting.extensionOptions) {
+        await chrome.runtime.openOptionsPage();
+      } else {
+        await chrome.tabs.create({ url: setting.url, active: true, windowId: sender.tab.windowId });
+      }
       return { ok: true };
     }
 
@@ -660,15 +679,28 @@ async function closeDuplicateTabs(preferredTabId) {
   if (tabIds.length) await chrome.tabs.remove(tabIds);
 }
 
+async function closeUnfocusedNewTabs() {
+  const { closeNewTabsOnActivation } = await chrome.storage.sync.get({
+    closeNewTabsOnActivation: false
+  });
+  if (!closeNewTabsOnActivation) return;
+
+  const tabs = await chrome.tabs.query({});
+  const tabIds = unfocusedNewTabIds(tabs);
+  if (tabIds.length) await chrome.tabs.remove(tabIds);
+}
+
 async function openCommandBar(tab) {
   if (!tab?.id) return;
 
   try {
+    await checkForExtensionUpdate();
     await closeDuplicateTabs(tab.id);
+    await closeUnfocusedNewTabs();
   } catch (error) {
     // Duplicate cleanup is optional and should never prevent the command bar
     // from opening if tabs changed while the cleanup was in progress.
-    console.info("Could not close duplicate tabs", error);
+    console.info("Could not clean up tabs", error);
   }
 
   // Reassert the active browser window and tab before injecting. This gives

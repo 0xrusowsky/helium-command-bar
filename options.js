@@ -17,6 +17,7 @@ const blurToggle = document.querySelector("#blur-inactive-split");
 const resultsStatus = document.querySelector("#results-status");
 const duplicatesStatus = document.querySelector("#duplicates-status");
 const duplicateTabsToggle = document.querySelector("#close-duplicate-tabs");
+const newTabsToggle = document.querySelector("#close-new-tabs");
 const themeStatus = document.querySelector("#theme-status");
 const themeColorInput = document.querySelector("#command-bar-color");
 const themeColorText = document.querySelector("#command-bar-color-text");
@@ -43,13 +44,15 @@ const KARABINER_BASE_URL = "https://raw.githubusercontent.com/0xrusowsky/helium-
 const CORE_KARABINER_RULE_URL = `${KARABINER_BASE_URL}/karabiner-core.json`;
 const CORE_COMMANDS = Object.freeze({
   "open-command-bar": "Open command bar",
-  "cycle-split-pane": "Switch split pane",
+  "cycle-split-pane": "Next split pane",
+  "previous-split-pane": "Previous split pane",
   "next-tab-block": "Next tab block",
   "previous-tab-block": "Previous tab block"
 });
 const CORE_SHORTCUTS = Object.freeze({
   "open-command-bar": "⇧⌘Space",
   "cycle-split-pane": "⌃⇧↑",
+  "previous-split-pane": "⌃⇧↓",
   "next-tab-block": "⌃⇧→",
   "previous-tab-block": "⌃⇧←"
 });
@@ -302,17 +305,18 @@ async function refreshCommandAssignments() {
     const byName = new Map(commands.map((command) => [command.name, command]));
     renderCommandAssignments(commandAssignments, CORE_COMMANDS, byName, (name) => CORE_SHORTCUTS[name]);
 
+    const commandCount = Object.keys(CORE_COMMANDS).length;
     const coreReadyCount = Object.keys(CORE_COMMANDS).filter((name) => {
       const shortcut = byName.get(name)?.shortcut;
       return shortcut && shortcut === CORE_SHORTCUTS[name];
     }).length;
-    const coreReady = coreReadyCount === Object.keys(CORE_COMMANDS).length;
-    coreStatus.textContent = coreReady ? "Ready" : `${coreReadyCount} of 4 ready`;
+    const coreReady = coreReadyCount === commandCount;
+    coreStatus.textContent = coreReady ? "Ready" : `${coreReadyCount} of ${commandCount} ready`;
     coreStatus.classList.toggle("ready", coreReady);
     coreStatus.classList.toggle("incomplete", !coreReady);
     coreSetupMessage.textContent = coreReady
-      ? "All four bridge shortcuts match the core Karabiner mappings."
-      : "Assign the expected shortcuts shown above before importing the core Karabiner rules. Existing custom assignments are not overwritten.";
+      ? "All five bridge shortcuts match the core Karabiner mappings."
+      : "Assign the expected shortcuts shown above before importing the core Karabiner rules. Chromium only installs four defaults, so assign Previous split pane to Ctrl-Shift-Down manually. Existing custom assignments are not overwritten.";
     setKarabinerImportLink(importCoreKarabinerLink, CORE_KARABINER_RULE_URL, coreReady);
   } catch (error) {
     const message = error.message || "Could not read extension shortcuts.";
@@ -329,6 +333,7 @@ const stored = await chrome.storage.sync.get({
   commandBarColor: DEFAULT_COMMAND_BAR_COLOR,
   blurInactiveSplitPane: false,
   closeDuplicateTabsOnActivation: false,
+  closeNewTabsOnActivation: false,
   showFavorites: true,
   showRecentlyClosed: true,
   favoriteFolderIds: null,
@@ -342,6 +347,7 @@ setThemeColor(stored.commandBarColor);
 favoritesToggle.checked = stored.showFavorites !== false;
 recentlyClosedToggle.checked = stored.showRecentlyClosed !== false;
 duplicateTabsToggle.checked = stored.closeDuplicateTabsOnActivation === true;
+newTabsToggle.checked = stored.closeNewTabsOnActivation === true;
 favoriteFolderIds = Array.isArray(stored.favoriteFolderIds)
   ? stored.favoriteFolderIds
   : null;
@@ -404,6 +410,13 @@ recentlyClosedToggle.addEventListener("change", async () => {
 duplicateTabsToggle.addEventListener("change", async () => {
   await chrome.storage.sync.set({
     closeDuplicateTabsOnActivation: duplicateTabsToggle.checked
+  });
+  showDuplicatesStatus();
+});
+
+newTabsToggle.addEventListener("change", async () => {
+  await chrome.storage.sync.set({
+    closeNewTabsOnActivation: newTabsToggle.checked
   });
   showDuplicatesStatus();
 });
@@ -471,6 +484,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
   if (changes.closeDuplicateTabsOnActivation) {
     duplicateTabsToggle.checked = changes.closeDuplicateTabsOnActivation.newValue === true;
+  }
+  if (changes.closeNewTabsOnActivation) {
+    newTabsToggle.checked = changes.closeNewTabsOnActivation.newValue === true;
   }
   if (changes.arcSetupCompleted) {
     updateArcSetup(changes.arcSetupCompleted.newValue);

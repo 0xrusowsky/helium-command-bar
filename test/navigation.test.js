@@ -9,6 +9,8 @@ import {
   getSplitPaneCycleTarget,
   isSplitTab,
   setRememberedTabId,
+  sortTabBlocksByRecentUse,
+  unfocusedNewTabIds,
 } from "../navigation.js";
 
 function tab(id, index, options = {}) {
@@ -17,9 +19,22 @@ function tab(id, index, options = {}) {
     index,
     windowId: options.windowId ?? 1,
     active: options.active ?? false,
+    lastAccessed: options.lastAccessed ?? 0,
     splitViewId: options.splitViewId,
   };
 }
+
+test("finds unfocused New Tab tabs without closing active or loading tabs", () => {
+  assert.deepEqual(unfocusedNewTabIds([
+    { id: 1, active: true, url: "chrome://newtab/", title: "New Tab" },
+    { id: 2, active: false, url: "chrome://newtab/", title: "New Tab" },
+    { id: 3, active: false, url: "helium://new-tab/", title: "New Tab" },
+    { id: 4, active: false, url: "about:newtab", title: "New Tab" },
+    { id: 5, active: false, url: "https://example.com/", title: "New Tab" },
+    { id: 6, active: false, url: "", title: "New Tab" },
+    { id: 7, active: false, pendingUrl: "https://example.com/", title: "New Tab" },
+  ]), [2, 3, 4, 6]);
+});
 
 test("recognizes split membership without treating a missing ID as split", () => {
   assert.equal(isSplitTab(tab(1, 0), -1), false);
@@ -54,6 +69,36 @@ test("groups split members even if their tab indices are not adjacent", () => {
   assert.equal(blocks.length, 2);
   assert.deepEqual(blocks[0].members.map((member) => member.id), [1, 3]);
   assert.deepEqual(blocks[1].members.map((member) => member.id), [2]);
+});
+
+test("sorts tab blocks by recent use instead of open position", () => {
+  const blocks = sortTabBlocksByRecentUse(buildTabBlocks([
+    tab(1, 0, { active: true, lastAccessed: 30 }),
+    tab(2, 1, { lastAccessed: 10 }),
+    tab(3, 2, { lastAccessed: 20 }),
+  ]));
+
+  assert.deepEqual(
+    blocks.map((block) => block.members[0].id),
+    [1, 3, 2],
+  );
+  assert.equal(
+    blocks[getAdjacentBlockIndex(blocks, 1, null, Direction.NEXT)].members[0].id,
+    3,
+  );
+});
+
+test("sorts a split block by its most recently used member", () => {
+  const blocks = sortTabBlocksByRecentUse(buildTabBlocks([
+    tab(1, 0, { lastAccessed: 30 }),
+    tab(2, 1, { splitViewId: 10, lastAccessed: 10 }),
+    tab(3, 2, { splitViewId: 10, lastAccessed: 40 }),
+  ]));
+
+  assert.deepEqual(
+    blocks.map((block) => block.members.map((member) => member.id)),
+    [[2, 3], [1]],
+  );
 });
 
 test("next block skips the other member of the active split", () => {

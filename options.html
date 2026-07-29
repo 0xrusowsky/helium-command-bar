@@ -138,11 +138,11 @@
         </div>
       </section>
 
-      <section aria-labelledby="duplicates-heading">
+      <section aria-labelledby="cleanup-heading">
         <div class="section-heading">
           <div>
-            <h2 id="duplicates-heading">Duplicate tabs</h2>
-            <p>Optionally keep only one tab for every exact URL whenever the command bar opens.</p>
+            <h2 id="cleanup-heading">Tab cleanup</h2>
+            <p>Optionally clean up unused tabs whenever you use an extension shortcut.</p>
           </div>
           <span id="duplicates-status" role="status" aria-live="polite"></span>
         </div>
@@ -150,9 +150,18 @@
         <label class="toggle-row">
           <span>
             <strong>Silently close duplicate tabs</strong>
-            <small>Close duplicates across all windows on command-bar activation. URLs must match exactly, including query parameters and fragments.</small>
+            <small>Close duplicates across all windows. URLs must match exactly, including query parameters and fragments.</small>
           </span>
           <input id="close-duplicate-tabs" type="checkbox" role="switch">
+          <i aria-hidden="true"></i>
+        </label>
+
+        <label class="toggle-row">
+          <span>
+            <strong>Silently close unfocused New Tab tabs</strong>
+            <small>Close unused New Tab pages while preserving the currently focused tab.</small>
+          </span>
+          <input id="close-new-tabs" type="checkbox" role="switch">
           <i aria-hidden="true"></i>
         </label>
       </section>
@@ -233,7 +242,7 @@
         <div class="karabiner-setup">
           <div>
             <strong>Use Command-T for the command bar</strong>
-            <p>Import the core mappings to translate Command-T to the extension's Command-Shift-Space bridge, plus Option-T, Ctrl-Tab, Ctrl-Shift-Tab, Ctrl-J/K aliases, and Ctrl-H/L. Each rule remains opt-in inside Karabiner-Elements.</p>
+            <p>Assign Previous split pane to Ctrl-Shift-Down, then import the core mappings for Command-T, Option-T, Ctrl-Tab, Ctrl-Shift-Tab, Ctrl-J/K, and directional Ctrl-H/L. Each rule remains opt-in inside Karabiner-Elements.</p>
           </div>
           <a id="import-core-karabiner" class="primary-button disabled" aria-disabled="true">Import core shortcuts</a>
         </div>
@@ -242,7 +251,7 @@
           <span id="core-status" class="setup-status" role="status" aria-live="polite"></span>
           <p id="core-setup-message" class="permission-note"></p>
         </div>
-        <p class="permission-note">Chromium cannot automatically assign an extension to its protected Command-T shortcut, so Karabiner provides the user-facing default without manual extension configuration. Command-T replaces Helium's normal new-tab behavior when enabled; Option-T continues to create a native split.</p>
+        <p class="permission-note">Chromium permits more than four commands but installs at most four suggested shortcuts. Assign Ctrl-Shift-Down to Previous split pane once in Helium's extension-shortcuts page; the other four bridges retain their defaults. Command-T replaces Helium's normal new-tab behavior when its Karabiner rule is enabled, while Option-T continues to create a native split.</p>
         <button id="open-extension-shortcuts" class="secondary-button keyboard-shortcuts-button" type="button">Open extension shortcuts</button>
       </section>
     </main>

@@ -567,10 +567,10 @@
       if (row.kind === "tab") rowElement = makeTabRow(row, navigationItems.length);
       else if (row.kind === "bookmark") rowElement = makeBookmarkRow(row, navigationItems.length);
       else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
-      else if (row.kind === "setting") rowElement = makeSettingRow(row, navigationItems.length);
+      else if (row.kind === "setting" || row.kind === "update") rowElement = makeSettingRow(row, navigationItems.length);
       else if (row.kind === "tab-action") rowElement = makeTabActionRow(row, navigationItems.length);
       else rowElement = makeLaunchRow(row, navigationItems.length);
-      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "tab-action"
+      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "update" || row.kind === "tab-action"
         ? sections.search
         : row.kind === "bookmark"
           ? sections.favorites
@@ -653,6 +653,8 @@
         settingId: item.row.setting.id,
         tabId: item.row.tab?.id
       });
+    } else if (item.row.kind === "update") {
+      await sendAction({ type: "helium-command-bar:reload-extension" });
     } else if (item.row.kind === "tab-action") {
       const action = item.row.action;
       await sendAction(action.id === "toggle-favorite"

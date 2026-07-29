@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560">
+  <defs>
+    <linearGradient id="surface" x1="80" y1="20" x2="1320" y2="540" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fafaf9"/>
+      <stop offset="1" stop-color="#e5e5e3"/>
+    </linearGradient>
+    <linearGradient id="icon-bg" x1="20" y1="8" x2="108" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6c6d71"/>
+      <stop offset="1" stop-color="#46474c"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="13" stdDeviation="13" flood-color="#202126" flood-opacity=".2"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="560" fill="url(#surface)"/>
+  <circle cx="1240" cy="70" r="260" fill="#d3d3d0" opacity=".45"/>
+  <circle cx="115" cy="530" r="210" fill="#ffffff" opacity=".55"/>
+  <g transform="translate(170 164) scale(1.8)" filter="url(#shadow)">
+    <rect width="128" height="128" rx="30" fill="url(#icon-bg)"/>
+    <circle cx="53" cy="51" r="27" fill="none" stroke="white" stroke-width="9"/>
+    <path d="M53 28v46" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" opacity=".78"/>
+    <path d="m73 71 27 27" fill="none" stroke="white" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="500" y="238" fill="#24252a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="62" font-weight="750">Helium Command Bar</text>
+  <text x="503" y="304" fill="#55565c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="500">A keyboard-first command bar for Helium</text>
+  <g transform="translate(503 352)" fill="#6a6b70" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="500">
+    <text x="0" y="0">Search tabs</text>
+    <circle cx="148" cy="-7" r="3"/>
+    <text x="170" y="0">Navigate splits</text>
+    <circle cx="350" cy="-7" r="3"/>
+    <text x="372" y="0">Stay on the keyboard</text>
+  </g>
+</svg>

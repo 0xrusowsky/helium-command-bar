@@ -27,6 +27,16 @@ export function normalizeResultSectionOrder(value) {
 
 export const SETTINGS_ENTRIES = Object.freeze([
   Object.freeze({
+    id: "extension-settings",
+    title: "Helium Command Bar settings",
+    url: "options.html",
+    description: "Configure the Helium Command Bar extension",
+    keywords: "extension options preferences configuration command bar",
+    icon: "settings",
+    extensionOptions: true,
+    aliases: []
+  }),
+  Object.freeze({
     id: "settings",
     title: "Settings",
     url: "helium://settings",
@@ -250,6 +260,9 @@ export function filterTabActions(query, currentTab) {
 
 export function getSettingForTab(tab) {
   const url = normalize(tab?.url || tab?.pendingUrl || "").replace(/[?#].*$/, "").replace(/\/$/, "");
+  if (/^chrome-extension:\/\/[^/]+\/options\.html$/.test(url)) {
+    return getSettingById("extension-settings");
+  }
   let bestMatch = null;
   let bestLength = -1;
 
