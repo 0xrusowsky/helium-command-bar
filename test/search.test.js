@@ -136,9 +136,12 @@ test("rejects sparse subsequences in unrelated titles", () => {
 });
 
 test("finds Helium settings destinations by title and keywords", () => {
-  const extensionSettings = filterSettings("command bar settings")[0];
-  assert.equal(extensionSettings.id, "extension-settings");
+  const extensionSettings = getSettingById("extension-settings");
   assert.equal(extensionSettings.extensionOptions, true);
+  assert.equal(
+    filterSettings("command bar settings").some((setting) => setting.id === "extension-settings"),
+    false,
+  );
   assert.equal(
     getSettingForTab({ url: "chrome-extension://extension-id/options.html" })?.id,
     "extension-settings",

@@ -152,9 +152,10 @@
         display: flex;
         max-height: min(500px, calc(100vh - 115px));
         padding: 0 8px 8px;
-        overflow-y: auto;
+        overflow-y: scroll;
         overscroll-behavior: contain;
         flex-direction: column;
+        scrollbar-gutter: stable;
       }
       .row {
         display: flex;
@@ -204,17 +205,6 @@
       .title { font-weight: 650; }
       .subtitle { color: var(--muted); font-size: 11px; }
       .split-row { min-height: 58px; gap: 8px; padding: 5px 7px; }
-      .split-label {
-        display: flex;
-        width: 68px;
-        flex: none;
-        align-items: center;
-        color: var(--accent);
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: .04em;
-        text-transform: uppercase;
-      }
       .split-members {
         display: grid;
         min-width: 0;
@@ -281,7 +271,12 @@
     }
     const backdrop = shadow.querySelector(".backdrop");
     let viewer = backdrop.querySelector(".viewer");
+    const openTabCount = message.items.reduce(
+      (count, item) => count + item.members.length,
+      0,
+    );
     let list;
+    let header;
     const isNewViewer = !viewer;
 
     if (isNewViewer) {
@@ -289,14 +284,16 @@
       viewer.tabIndex = -1;
       viewer.setAttribute("aria-label", "Open tabs");
 
-      const header = element("header", "", "Open");
+      header = element("header");
       list = element("div", "list");
 
       viewer.append(header, list);
       backdrop.append(viewer);
     } else {
+      header = viewer.querySelector("header");
       list = viewer.querySelector(".list");
     }
+    header.textContent = `${openTabCount} OPEN TABS`;
 
     const existingRows = [...list.querySelectorAll(":scope > .row")];
     const canReuseRows = existingRows.length === message.items.length &&
@@ -330,7 +327,6 @@
 
         if (item.type === "split") {
           row.classList.add("split-row");
-          const splitLabel = element("span", "split-label", "Split view");
           const members = element("span", "split-members");
           for (const member of item.members) {
             const memberElement = element(
@@ -343,7 +339,7 @@
             );
             members.append(memberElement);
           }
-          row.append(splitLabel, members);
+          row.append(members);
         } else {
           const tab = item.members[0];
           const details = element("span", "details");

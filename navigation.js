@@ -7,12 +7,17 @@ export function unfocusedNewTabIds(tabs) {
   return tabs
     .filter((tab) => {
       if (tab.active || tab.id === undefined) return false;
-      const url = (tab.pendingUrl || tab.url || "").trim().toLocaleLowerCase();
-      if (/^(?:helium|chrome):\/\/(?:newtab|new-tab)(?:\/|[?#]|$)/.test(url)) {
-        return true;
-      }
-      if (url === "about:newtab") return true;
-      return !url && (tab.title || "").trim().toLocaleLowerCase() === "new tab";
+      const pendingUrl = (tab.pendingUrl || "").trim().toLocaleLowerCase();
+      const url = (pendingUrl || tab.url || "").trim().toLocaleLowerCase();
+      const isNewTabUrl = /^(?:helium|chrome):\/\/(?:newtab|new-tab|new-tab-page)(?:\/|[?#]|$)/.test(url) ||
+        url === "about:newtab";
+      if (isNewTabUrl) return true;
+
+      // Helium can expose its New Tab page with an implementation-specific
+      // internal URL. Trust the stable title unless the tab is navigating to
+      // another destination.
+      const title = (tab.title || "").trim().toLocaleLowerCase();
+      return !pendingUrl && (title === "new tab" || title === "new split tab");
     })
     .map((tab) => tab.id);
 }

@@ -73,9 +73,9 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
-- Type **Helium Command Bar settings** (or **extension options**) to open this extension's settings directly. Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`.
+- Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`. Press **Right Arrow** on **Extensions** to reveal the Helium Command Bar settings, then **Left Arrow** to collapse it.
 - At browser startup, and otherwise at most once per day when using any extension shortcut, the extension checks whether its unpacked files contain a newer manifest version. When they do, **Update extension** appears as the command bar's first option and reloads the extension—the same action as the reload button on `helium://extensions`.
-- Open extension settings, browser Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Searching for their destination shows the dedicated icon and focuses the existing tab instead of opening a duplicate.
+- Open extension settings, browser Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Their command-bar destinations focus an existing tab instead of opening a duplicate.
 
 Bare domains such as `example.com`, localhost URLs, IP addresses, and explicit `http://` or `https://` URLs are opened directly. Other text is sent to the browser's default search provider.
 

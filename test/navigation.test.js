@@ -33,7 +33,9 @@ test("finds unfocused New Tab tabs without closing active or loading tabs", () =
     { id: 5, active: false, url: "https://example.com/", title: "New Tab" },
     { id: 6, active: false, url: "", title: "New Tab" },
     { id: 7, active: false, pendingUrl: "https://example.com/", title: "New Tab" },
-  ]), [2, 3, 4, 6]);
+    { id: 8, active: false, url: "chrome://new-tab-page/", title: "" },
+    { id: 9, active: false, url: "helium://internal-new-tab", title: "New Split Tab" },
+  ]), [2, 3, 4, 5, 6, 8, 9]);
 });
 
 test("recognizes split membership without treating a missing ID as split", () => {

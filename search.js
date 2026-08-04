@@ -34,6 +34,7 @@ export const SETTINGS_ENTRIES = Object.freeze([
     keywords: "extension options preferences configuration command bar",
     icon: "settings",
     extensionOptions: true,
+    hidden: true,
     aliases: []
   }),
   Object.freeze({
@@ -201,6 +202,7 @@ export function filterSettings(query) {
   if (!normalizedQuery) return [];
 
   return SETTINGS_ENTRIES
+    .filter((setting) => !setting.hidden)
     .map((setting) => ({
       setting,
       score: scoreTab({

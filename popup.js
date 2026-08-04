@@ -10,6 +10,7 @@ import {
   filterTabActions,
   filterTabBlocks,
   flattenBookmarks,
+  getSettingById,
   getSettingForTab,
   hostnameFor,
   normalizeResultSectionOrder,
@@ -44,6 +45,7 @@ let showRecentlyClosed = true;
 let favoriteFolderIds = null;
 let resultSectionOrder = [...DEFAULT_RESULT_SECTION_ORDER];
 const splitNavigationKeys = new Set();
+const expandedSettingIds = new Set();
 
 function isSplitVisuallyExpanded(splitKey) {
   return defaultSplitExpanded || splitNavigationKeys.has(splitKey);
@@ -124,11 +126,30 @@ function updateRows({ resetSelection = false } = {}) {
       }
     }] : []),
     ...(launch ? [launch] : []),
-    ...matchedSettings.map((setting) => ({
-      kind: "setting",
-      setting,
-      tab: openSettingTabs.get(setting.id) || null
-    })),
+    ...matchedSettings.flatMap((setting) => {
+      const parent = {
+        kind: "setting",
+        setting,
+        expandable: setting.id === "extensions",
+        tab: openSettingTabs.get(setting.id) || null
+      };
+      if (setting.id !== "extensions") return [parent];
+      const extensionSettings = getSettingById("extension-settings");
+      return [parent, {
+        kind: "extension-setting",
+        parentSettingId: "extensions",
+        setting: extensionSettings,
+        tab: openSettingTabs.get(extensionSettings.id) || null
+      }, {
+        kind: "extension-update",
+        parentSettingId: "extensions",
+        setting: {
+          title: "Update extension",
+          description: "Reload the Helium Command Bar extension",
+          icon: "settings"
+        }
+      }];
+    }),
     ...matchedTabActions.map((action) => ({
       kind: "tab-action",
       action,
@@ -176,6 +197,17 @@ function setSelected(index, { scroll = true } = {}) {
   const selectedElement = navigationItems[selectedIndex]?.element;
   queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
   if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+}
+
+function isArrowKey(event, direction, keyCode) {
+  return event.key === `Arrow${direction}` ||
+    event.key === direction ||
+    event.code === `Arrow${direction}` ||
+    event.keyCode === keyCode;
+}
+
+function isKey(event, key, keyCode) {
+  return event.key === key || event.code === key || event.keyCode === keyCode;
 }
 
 function makeTabRow(row, index) {
@@ -270,17 +302,17 @@ function splitRepresentative(memberRows) {
     [...memberRows].sort((left, right) => (right.tab.lastAccessed || 0) - (left.tab.lastAccessed || 0))[0]?.tab;
 }
 
-function makeSplitGroup(size, navigationEntered) {
+function makeSplitGroup(size, navigationEntered, label = "Split view") {
   const group = document.createElement("li");
   group.className = `split-group expanded${navigationEntered ? " navigation-entered" : ""}`;
   group.setAttribute("role", "group");
-  group.setAttribute("aria-label", `Expanded split view with ${size} tabs`);
+  group.setAttribute("aria-label", `${label} with ${size} options`);
 
   const header = document.createElement("div");
   header.className = "split-group-header";
   header.append(
     createSvgIcon("M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm9 0h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v-13Z", "split-group-icon"),
-    document.createTextNode("Split view"),
+    document.createTextNode(label),
     Object.assign(document.createElement("kbd"), {
       className: "split-navigation-hint",
       textContent: navigationEntered ? "←" : "→"
@@ -543,7 +575,7 @@ function makeSettingRow(row, index) {
 
   const enterHint = document.createElement("kbd");
   enterHint.className = "enter-hint";
-  enterHint.textContent = "↵";
+  enterHint.textContent = row.expandable ? "→" : "↵";
   element.append(iconBox, details, enterHint);
   return element;
 }
@@ -620,6 +652,29 @@ function renderRows() {
 
   while (rowIndex < rows.length) {
     const row = rows[rowIndex];
+    if (
+      (row.kind === "extension-setting" || row.kind === "extension-update") &&
+      !expandedSettingIds.has(row.parentSettingId)
+    ) {
+      rowIndex += 1;
+      continue;
+    }
+    if (row.kind === "setting" && row.expandable && expandedSettingIds.has(row.setting.id)) {
+      const childRows = [];
+      rowIndex += 1;
+      while (rowIndex < rows.length && rows[rowIndex].parentSettingId === row.setting.id) {
+        childRows.push(rows[rowIndex]);
+        rowIndex += 1;
+      }
+      const { group, entries } = makeSplitGroup(childRows.length, true, row.setting.title);
+      for (const childRow of childRows) {
+        const rowElement = makeSettingRow(childRow, navigationItems.length);
+        rowElement.classList.add("split-member-row");
+        entries.append(bindNavigationItem(rowElement, { kind: "row", row: childRow }));
+      }
+      sections.search.list.append(group);
+      continue;
+    }
     if (row.kind === "split-member") {
       const splitKey = row.splitKey;
       const memberRows = [];
@@ -664,10 +719,10 @@ function renderRows() {
     if (row.kind === "tab") element = makeTabRow(row, navigationItems.length);
     else if (row.kind === "bookmark") element = makeBookmarkRow(row, navigationItems.length);
     else if (row.kind === "closed") element = makeClosedRow(row, navigationItems.length);
-    else if (row.kind === "setting" || row.kind === "update") element = makeSettingRow(row, navigationItems.length);
+    else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update") element = makeSettingRow(row, navigationItems.length);
     else if (row.kind === "tab-action") element = makeTabActionRow(row, navigationItems.length);
     else element = makeLaunchRow(row, navigationItems.length);
-    const section = row.kind === "launch" || row.kind === "setting" || row.kind === "update" || row.kind === "tab-action"
+    const section = row.kind === "launch" || row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "tab-action"
       ? sections.search
       : row.kind === "bookmark"
         ? sections.favorites
@@ -683,6 +738,7 @@ function renderRows() {
   resultsElement.replaceChildren(fragment);
   selectedIndex = Math.max(0, Math.min(selectedIndex, navigationItems.length - 1));
   setSelected(selectedIndex, { scroll: false });
+  queryInput.focus({ preventScroll: true });
 }
 
 async function activateTab(tab) {
@@ -772,8 +828,12 @@ async function openSetting(setting, tab = null) {
   try {
     if (tab) await activateTab(tab);
     else {
-      if (setting.extensionOptions) await chrome.runtime.openOptionsPage();
-      else await chrome.tabs.create({ url: setting.url, active: true });
+      if (setting.extensionOptions) {
+        await chrome.tabs.create({
+          url: chrome.runtime.getURL(setting.url),
+          active: true
+        });
+      } else await chrome.tabs.create({ url: setting.url, active: true });
       closeCommandBar();
     }
   } catch (error) {
@@ -795,9 +855,10 @@ async function activateNavigationItem(index = selectedIndex) {
     await openBookmark(item.row.bookmark);
   } else if (item.row.kind === "closed") {
     await restoreSession(item.row.closed);
-  } else if (item.row.kind === "setting") {
+  } else if (item.row.kind === "setting" || item.row.kind === "extension-setting") {
     await openSetting(item.row.setting, item.row.tab);
-  } else if (item.row.kind === "update") {
+  } else if (item.row.kind === "update" || item.row.kind === "extension-update") {
+    closeCommandBar();
     chrome.runtime.reload();
   } else if (item.row.kind === "tab-action") {
     await runTabAction(item.row);
@@ -880,34 +941,53 @@ async function loadRecentlyClosed() {
 
 queryInput.addEventListener("input", () => {
   splitNavigationKeys.clear();
+  expandedSettingIds.clear();
   updateRows({ resetSelection: true });
 });
 queryInput.addEventListener("keydown", async (event) => {
   if (event.isComposing) return;
 
-  if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) {
+  if (isArrowKey(event, "Down", 40) || (event.ctrlKey && event.key === "n")) {
     event.preventDefault();
     setSelected(selectedIndex + 1);
-  } else if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) {
+  } else if (isArrowKey(event, "Up", 38) || (event.ctrlKey && event.key === "p")) {
     event.preventDefault();
     setSelected(selectedIndex - 1);
-  } else if (event.key === "ArrowRight") {
+  } else if (isArrowKey(event, "Right", 39)) {
     const item = navigationItems[selectedIndex];
     if (item?.kind === "split-group") {
       event.preventDefault();
       enterSplitNavigation(item);
+    } else if (item?.kind === "row" && item.row.expandable) {
+      event.preventDefault();
+      expandedSettingIds.add(item.row.setting.id);
+      renderRows();
+      const childIndex = navigationItems.findIndex((candidate) =>
+        candidate.kind === "row" && candidate.row.parentSettingId === item.row.setting.id
+      );
+      if (childIndex !== -1) setSelected(childIndex);
+      queryInput.focus({ preventScroll: true });
     }
-  } else if (event.key === "ArrowLeft") {
+  } else if (isArrowKey(event, "Left", 37)) {
     const item = navigationItems[selectedIndex];
     if (item?.kind === "split-member") {
       event.preventDefault();
       exitSplitNavigation(item);
+    } else if (item?.kind === "row" && (item.row.kind === "extension-setting" || item.row.kind === "extension-update")) {
+      event.preventDefault();
+      expandedSettingIds.delete(item.row.parentSettingId);
+      renderRows();
+      const parentIndex = navigationItems.findIndex((candidate) =>
+        candidate.kind === "row" && candidate.row.setting?.id === item.row.parentSettingId
+      );
+      if (parentIndex !== -1) setSelected(parentIndex);
+      queryInput.focus({ preventScroll: true });
     }
-  } else if (event.key === "Enter") {
+  } else if (isKey(event, "Enter", 13)) {
     event.preventDefault();
     if (event.metaKey || event.ctrlKey) await openInput();
     else await activateNavigationItem();
-  } else if (event.key === "Backspace" && (event.metaKey || event.ctrlKey)) {
+  } else if (isKey(event, "Backspace", 8) && (event.metaKey || event.ctrlKey)) {
     const item = navigationItems[selectedIndex];
     const tab = item?.kind === "split-member"
       ? item.row.tab
@@ -918,7 +998,7 @@ queryInput.addEventListener("keydown", async (event) => {
       event.preventDefault();
       await closeTab(tab.id);
     }
-  } else if (event.key === "Escape") {
+  } else if (isKey(event, "Escape", 27)) {
     closeCommandBar();
   }
 });

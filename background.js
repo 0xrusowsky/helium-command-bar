@@ -322,13 +322,34 @@ async function queryRows(query, requesterTab) {
       }
     }] : []),
     ...(target ? [{ kind: "launch", target }] : []),
-    ...matchedSettings.map((setting) => ({
-      kind: "setting",
-      setting,
-      tab: openSettingTabs.has(setting.id)
-        ? tabForOverlay(openSettingTabs.get(setting.id))
-        : null
-    })),
+    ...matchedSettings.flatMap((setting) => {
+      const parent = {
+        kind: "setting",
+        setting,
+        expandable: setting.id === "extensions",
+        tab: openSettingTabs.has(setting.id)
+          ? tabForOverlay(openSettingTabs.get(setting.id))
+          : null
+      };
+      if (setting.id !== "extensions") return [parent];
+      const extensionSettings = getSettingById("extension-settings");
+      return [parent, {
+        kind: "extension-setting",
+        parentSettingId: "extensions",
+        setting: extensionSettings,
+        tab: openSettingTabs.has(extensionSettings.id)
+          ? tabForOverlay(openSettingTabs.get(extensionSettings.id))
+          : null
+      }, {
+        kind: "extension-update",
+        parentSettingId: "extensions",
+        setting: {
+          title: "Update extension",
+          description: "Reload the Helium Command Bar extension",
+          icon: "settings"
+        }
+      }];
+    }),
     ...matchedTabActions.map((action) => ({
       kind: "tab-action",
       action,
@@ -489,6 +510,10 @@ async function handleOverlayMessage(message, sender) {
       return queryRows(message.query, sender.tab);
 
     case "helium-command-bar:reload-extension":
+      await clearInactiveSplitBlur(
+        sender.tab.id,
+        Array.isArray(message.blurredPartnerIds) ? message.blurredPartnerIds : []
+      );
       chrome.runtime.reload();
       return { ok: true };
 
@@ -529,7 +554,11 @@ async function handleOverlayMessage(message, sender) {
       }
 
       if (setting.extensionOptions) {
-        await chrome.runtime.openOptionsPage();
+        await chrome.tabs.create({
+          url: chrome.runtime.getURL(setting.url),
+          active: true,
+          windowId: sender.tab.windowId
+        });
       } else {
         await chrome.tabs.create({ url: setting.url, active: true, windowId: sender.tab.windowId });
       }
