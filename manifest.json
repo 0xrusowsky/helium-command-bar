@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Helium Command Bar",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "Search tabs, create splits, and navigate Helium's split-aware tab blocks from the keyboard.",
   "homepage_url": "https://github.com/0xrusowsky/helium-command-bar",
   "minimum_chrome_version": "109",
@@ -67,11 +67,14 @@
       "description": "Focus the next tab block"
     },
     "previous-tab-block": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Left",
-        "mac": "MacCtrl+Shift+Left"
-      },
       "description": "Focus the previous tab block"
+    },
+    "promote-preview-tab": {
+      "suggested_key": {
+        "default": "Ctrl+O",
+        "mac": "Command+MacCtrl+O"
+      },
+      "description": "Move the current preview tab into the main Helium window"
     }
   },
   "icons": {

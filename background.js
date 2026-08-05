@@ -34,6 +34,8 @@ const VISUAL_PERMISSION = { origins: ["<all_urls>"] };
 const interceptingSplitTabs = new Set();
 const blurredPartnersByOwner = new Map();
 const inactiveEffectByTab = new Map();
+let lastFocusedWindowId;
+let previousFocusedWindowId;
 
 let commandBarCssPromise;
 let bookmarkCachePromise;
@@ -719,6 +721,65 @@ async function closeUnfocusedNewTabs() {
   if (tabIds.length) await chrome.tabs.remove(tabIds);
 }
 
+async function findPromotionDestination(sourceWindowId) {
+  if (previousFocusedWindowId !== undefined && previousFocusedWindowId !== sourceWindowId) {
+    try {
+      const previousWindow = await chrome.windows.get(previousFocusedWindowId);
+      if (previousWindow.type === "normal") return previousWindow;
+    } catch {
+      previousFocusedWindowId = undefined;
+    }
+  }
+
+  // Avoid populating every tab in every window on the hot path. The usual
+  // case has one other Helium window; only query tab counts when there are
+  // multiple fallback candidates.
+  const candidates = (await chrome.windows.getAll()).filter((window) =>
+    window.type === "normal" && window.id !== sourceWindowId
+  );
+  if (candidates.length <= 1) return candidates[0];
+
+  const candidatesWithCounts = await Promise.all(candidates.map(async (window) => ({
+    window,
+    count: (await chrome.tabs.query({ windowId: window.id })).length
+  })));
+  candidatesWithCounts.sort((first, second) => second.count - first.count);
+  return candidatesWithCounts[0]?.window;
+}
+
+async function promoteCurrentTabToMainWindow() {
+  const [sourceTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!sourceTab?.id || !Number.isInteger(sourceTab.windowId)) return { ok: false };
+
+  const destinationWindow = await findPromotionDestination(sourceTab.windowId);
+  if (!destinationWindow?.id) return { ok: false };
+
+  const moved = await chrome.tabs.move(sourceTab.id, {
+    windowId: destinationWindow.id,
+    index: -1
+  });
+  const movedTab = Array.isArray(moved) ? moved[0] : moved;
+  if (!movedTab?.id) return { ok: false };
+
+  // Focus the destination as soon as the move completes. Empty-window cleanup
+  // is deliberately off the critical path because Chromium often closes the
+  // source window itself when its only tab is moved.
+  await Promise.all([
+    chrome.tabs.update(movedTab.id, { active: true }),
+    chrome.windows.update(destinationWindow.id, { focused: true })
+  ]);
+  void (async () => {
+    try {
+      const remainingTabs = await chrome.tabs.query({ windowId: sourceTab.windowId });
+      if (!remainingTabs.length) await chrome.windows.remove(sourceTab.windowId);
+    } catch {
+      // The source window may already have been closed by Chromium.
+    }
+  })();
+
+  return { ok: true };
+}
+
 async function openCommandBar(tab) {
   if (!tab?.id) return;
 
@@ -767,9 +828,17 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.action.onClicked.addListener(openCommandBar);
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "open-command-bar") return;
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  await openCommandBar(tab);
+  try {
+    if (command === "promote-preview-tab") {
+      await promoteCurrentTabToMainWindow();
+      return;
+    }
+    if (command !== "open-command-bar") return;
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    await openCommandBar(tab);
+  } catch (error) {
+    console.error(`Could not handle command ${command}`, error);
+  }
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
@@ -788,6 +857,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     void syncInactiveSplitEffects();
   }
 });
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  if (lastFocusedWindowId !== windowId) {
+    previousFocusedWindowId = lastFocusedWindowId;
+    lastFocusedWindowId = windowId;
+  }
+});
+void chrome.windows.getLastFocused().then((window) => {
+  if (window?.id !== undefined) lastFocusedWindowId = window.id;
+}).catch(() => {});
+
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   for (const ownerTabId of blurredPartnersByOwner.keys()) {
     if (ownerTabId !== tabId) blurredPartnersByOwner.delete(ownerTabId);

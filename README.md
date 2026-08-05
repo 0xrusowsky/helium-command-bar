@@ -22,7 +22,8 @@ A small Manifest V3 extension that gives Helium an Arc-like, keyboard-driven com
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select this directory.
 4. The extension bridge is **Command + Shift + Space** on macOS or **Ctrl + Shift + Space** elsewhere.
-5. On macOS, follow the Karabiner workflow below to use **Command + T** as the default user-facing command-bar shortcut.
+5. Reload the extension after installation and confirm **Move the current preview tab into the main Helium window** is assigned **Command + Control + O** at `helium://extensions/shortcuts`. It now uses one of Chromium's four suggested-shortcut slots. The previous tab-block command remains available, but may need its existing shortcut re-confirmed manually if Chromium does not retain it. Hammerspoon uses the promotion command as the internal bridge for **Command + O** in Little Helium previews.
+6. On macOS, follow the Karabiner workflow below to use **Command + T** as the default user-facing command-bar shortcut.
 
 Chromium will not automatically assign an extension directly to its built-in **Command + T** shortcut. The core Karabiner rule safely translates **Command + T** to the automatically assigned **Command + Shift + Space** bridge instead. If the bridge is unavailable or conflicts with another extension, open `chrome://extensions/shortcuts` and restore it before importing the Karabiner rule.
 
@@ -73,6 +74,7 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
+- The **Move the current preview tab into the main Helium window** command uses `chrome.tabs.move` to preserve the live page when Hammerspoon's Little Helium preview receives **Command + O**.
 - Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`. Press **Right Arrow** on **Extensions** to reveal the Helium Command Bar settings, then **Left Arrow** to collapse it.
 - At browser startup, and otherwise at most once per day when using any extension shortcut, the extension checks whether its unpacked files contain a newer manifest version. When they do, **Update extension** appears as the command bar's first option and reloads the extension—the same action as the reload button on `helium://extensions`.
 - Open extension settings, browser Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Their command-bar destinations focus an existing tab instead of opening a duplicate.
