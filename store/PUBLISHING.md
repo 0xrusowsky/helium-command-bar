@@ -44,6 +44,6 @@ All executable JavaScript and CSS must remain inside the uploaded package. Do no
 
 ## Existing unpacked users
 
-The store installation will probably receive a different extension ID from existing unpacked installations. Existing users should install the store version, reconfigure synchronized preferences if they do not transfer, assign extension shortcuts, enable the Karabiner rules, and then remove the unpacked copy.
+The store installation will probably receive a different extension ID from existing unpacked installations. Existing users should install the store version, reconfigure synchronized preferences if they do not transfer, assign extension shortcuts, update their Hammerspoon or Karabiner bridge if needed, and then remove the unpacked copy.
 
-The Chrome Web Store updates the extension package automatically, but it cannot update a user's external Karabiner configuration or manually assigned fifth extension shortcut.
+The Chrome Web Store updates the extension package automatically, but it cannot update a user's external Hammerspoon or Karabiner configuration or Helium shortcut assignments.

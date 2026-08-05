@@ -33,7 +33,7 @@ Features include:
 - Optionally close exact duplicate URLs whenever the command bar opens.
 - Customize result ordering, split presentation, and command-bar color.
 - Optionally emphasize the focused split pane with a local visual effect.
-- Use the included Karabiner-Elements integration for Command-T, Control-Tab, Control-H/L, and related shortcuts on macOS.
+- Use the optional Karabiner-Elements integration for Command-T, Option-T, Control-Tab, Control-H/L, and related shortcuts on macOS.
 
 The extension is designed for Helium. Most ordinary tab-search behavior also works in Chromium, but Helium-specific internal pages and split navigation require Helium and a Chromium version that exposes the split-view tab API.
 

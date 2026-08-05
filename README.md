@@ -21,11 +21,8 @@ A small Manifest V3 extension that gives Helium an Arc-like, keyboard-driven com
 1. Open `chrome://extensions` in Helium.
 2. Enable **Developer mode**.
 3. Choose **Load unpacked** and select this directory.
-4. The extension bridge is **Command + Shift + Space** on macOS or **Ctrl + Shift + Space** elsewhere.
+4. The extension command bridge is **Command + Shift + Space** on macOS or **Ctrl + Shift + Space** elsewhere. Keep the Helium shortcut assignment that is already working in your setup.
 5. Reload the extension after installation and confirm **Move the current preview tab into the main Helium window** is assigned **Command + Control + O** at `helium://extensions/shortcuts`. It now uses one of Chromium's four suggested-shortcut slots. The previous tab-block command remains available, but may need its existing shortcut re-confirmed manually if Chromium does not retain it. Hammerspoon uses the promotion command as the internal bridge for **Command + O** in Little Helium previews.
-6. On macOS, follow the Karabiner workflow below to use **Command + T** as the default user-facing command-bar shortcut.
-
-Chromium will not automatically assign an extension directly to its built-in **Command + T** shortcut. The core Karabiner rule safely translates **Command + T** to the automatically assigned **Command + Shift + Space** bridge instead. If the bridge is unavailable or conflicts with another extension, open `chrome://extensions/shortcuts` and restore it before importing the Karabiner rule.
 
 ## Keyboard navigation and Karabiner-Elements
 
@@ -33,22 +30,20 @@ The extension includes commands to switch split panes and move to the next or pr
 
 Control-Tab navigation opens a centered, input-free tab viewer showing every open block in the current window in tab-strip order. Without releasing Control, press Tab and Shift-Tab in any order to move forward and backward through the selection. The viewer uses the command bar's color theme, remains open for as long as Control is held, and switches only when Control is released, Enter is pressed, or a row is clicked. Hover or select a tab and press **D**, **Delete**, or **Backspace** to close it without dismissing the viewer. Escape cancels. Protected browser pages that reject extension injection retain immediate block navigation without the viewer.
 
-Open the extension's **Options** page to inspect active command assignments and import [`integrations/karabiner-core.json`](integrations/karabiner-core.json). It provides **Command + T** for the command bar, **Option + T** for Helium's native new-split command, **Control + Tab** / **Control + Shift + Tab** for block navigation, **Control + J/K** as next/previous aliases, and **Control + H/L** for split-pane switching. It does not intercept numbered shortcuts, leaving them available for profile navigation and Helium's native behavior.
+The current macOS setup keeps Helium-specific keyboard translations in Hammerspoon at `~/.hammerspoon/helium-keyboard.lua`. The event tap only consumes them while Helium is frontmost:
 
-Karabiner asks which rules to enable and scopes all of them to Helium's `net.imput.helium` bundle ID. Chromium allows more than four commands but installs at most four suggested shortcuts, so open `helium://extensions/shortcuts` and manually assign **Control + Shift + Down** to the fifth command, **Previous split pane**. The core Karabiner rules then map **Control + H** to that bridge and **Control + L** to the default **Control + Shift + Up** next-pane bridge.
+- **Command + Shift + P** aliases **Command + T** inside Helium for the command bar.
+- **Option + T** sends Helium's native **Command + Option + N** new-split command.
+- **Control + Tab** / **Control + Shift + Tab** navigate next/previous split-aware tab blocks.
+- **Control + J/K** are next/previous tab-block aliases.
+- **Control + H/L** switch between split panes.
+- **Control + 1/2** focus or launch the work and personal Helium profiles.
 
-The recommended macOS command-bar workflow is:
-
-```text
-Command + T → Karabiner → Command + Shift + Space → Open command bar
-```
-
-This makes **Command + T** the default user-facing command without relying on Chromium to assign a protected browser shortcut. Enabling the rule replaces Helium's normal new-tab behavior; use the command bar to open a URL or search instead.
-
+The extension's command assignments remain configurable at `helium://extensions/shortcuts`; existing custom assignments are not overwritten automatically. The repository still includes optional Karabiner-Elements support in [`integrations/karabiner-core.json`](integrations/karabiner-core.json) for users who prefer Karabiner instead of Hammerspoon. Do not enable both sets of Helium-specific translations at the same time. Karabiner remains available for unrelated device or keyboard-layout remapping.
 
 ### Migrating from Split Block Navigation
 
-Disable the standalone **Split Block Navigation** extension before configuring this unified extension; otherwise it may continue to own the same bridge shortcuts. Reload Helium Command Bar, assign **Control + Shift + Down** to **Previous split pane**, then open its Options page and confirm that all five core rows show the expected shortcuts before importing the core Karabiner rules. Existing custom assignments are never overwritten automatically.
+Disable the standalone **Split Block Navigation** extension before using the unified extension; otherwise it may continue to own the same navigation shortcuts.
 
 ## Important limitation
 
@@ -74,7 +69,7 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
-- The **Move the current preview tab into the main Helium window** command uses `chrome.tabs.move` to preserve the live page when Hammerspoon's Little Helium preview receives **Command + O**.
+- The **Move the current preview tab into the main Helium window** command uses `chrome.tabs.move` to preserve the live page when the Little Helium preview receives **Command + O**.
 - Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`. Press **Right Arrow** on **Extensions** to reveal the Helium Command Bar settings, then **Left Arrow** to collapse it.
 - At browser startup, and otherwise at most once per day when using any extension shortcut, the extension checks whether its unpacked files contain a newer manifest version. When they do, **Update extension** appears as the command bar's first option and reloads the extension—the same action as the reload button on `helium://extensions`.
 - Open extension settings, browser Settings, Keyboard shortcuts, Extensions, and bookmark-manager tabs are omitted from the regular **Open** section. Their command-bar destinations focus an existing tab instead of opening a duplicate.
