@@ -754,6 +754,21 @@ async function promoteCurrentTabToMainWindow() {
   const destinationWindow = await findPromotionDestination(sourceTab.windowId);
   if (!destinationWindow?.id) return { ok: false };
 
+  // Keep the source window alive with an inactive blank reserve tab. Moving
+  // the only tab otherwise makes Chromium close the preview window during the
+  // compositor handoff, which can flash while the live renderer is reparented.
+  // Hammerspoon hides this reserve window and reuses it as the next warm
+  // preview after the move completes.
+  try {
+    await chrome.tabs.create({
+      windowId: sourceTab.windowId,
+      url: "about:blank",
+      active: false
+    });
+  } catch (error) {
+    console.info("Could not create preview reserve tab", error);
+  }
+
   const moved = await chrome.tabs.move(sourceTab.id, {
     windowId: destinationWindow.id,
     index: -1
@@ -761,13 +776,17 @@ async function promoteCurrentTabToMainWindow() {
   const movedTab = Array.isArray(moved) ? moved[0] : moved;
   if (!movedTab?.id) return { ok: false };
 
-  // Focus the destination as soon as the move completes. Empty-window cleanup
-  // is deliberately off the critical path because Chromium often closes the
-  // source window itself when its only tab is moved.
-  await Promise.all([
-    chrome.tabs.update(movedTab.id, { active: true }),
-    chrome.windows.update(destinationWindow.id, { focused: true })
-  ]);
+  // Activate the moved tab before focusing the destination window. Doing
+  // these concurrently makes Chromium reparent and focus the renderer in the
+  // same compositor turn, which can produce a visible flash during promotion.
+  // Moving an active tab normally preserves its active state; avoid a
+  // redundant tabs.update in that case and retain the fallback for browsers
+  // that return it inactive.
+  if (!movedTab.active) await chrome.tabs.update(movedTab.id, { active: true });
+  await chrome.windows.update(destinationWindow.id, { focused: true });
+
+  // Empty-window cleanup is deliberately off the critical path because
+  // Chromium often closes the source window itself when its only tab is moved.
   void (async () => {
     try {
       const remainingTabs = await chrome.tabs.query({ windowId: sourceTab.windowId });
