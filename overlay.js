@@ -17,6 +17,26 @@
   ].join(";");
   document.documentElement.append(root);
 
+  // Claim keyboard focus before loading command-bar data. Without this, the
+  // page's previously focused input keeps receiving characters while the
+  // service worker gathers tabs, bookmarks, and sessions.
+  let pendingQuery = "";
+  root.tabIndex = -1;
+  root.focus({ preventScroll: true });
+  const capturePendingInput = (event) => {
+    if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingQuery = pendingQuery.slice(0, -1);
+    } else if (event.key.length === 1) {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingQuery += event.key;
+    }
+  };
+  root.addEventListener("keydown", capturePendingInput);
+
   let initial;
   try {
     initial = await chrome.runtime.sendMessage({
@@ -84,6 +104,8 @@
   queryInput.placeholder = "Search open/closed tabs or enter a URL…";
   queryInput.setAttribute("aria-controls", "results");
   queryInput.setAttribute("aria-autocomplete", "list");
+  queryInput.value = pendingQuery;
+  root.removeEventListener("keydown", capturePendingInput);
 
   const escapeHint = element("kbd", "", "esc");
   escapeHint.id = "escape-hint";
@@ -842,6 +864,7 @@
 
   rows = initial.rows;
   renderRows();
+  if (queryInput.value) void refreshRows({ resetSelection: true });
   focusCommandBar();
   for (const delay of [0, 50, 150, 300]) {
     setTimeout(focusCommandBar, delay);

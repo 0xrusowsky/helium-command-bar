@@ -802,16 +802,6 @@ async function promoteCurrentTabToMainWindow() {
 async function openCommandBar(tab) {
   if (!tab?.id) return;
 
-  try {
-    await checkForExtensionUpdate();
-    await closeDuplicateTabs(tab.id);
-    await closeUnfocusedNewTabs();
-  } catch (error) {
-    // Duplicate cleanup is optional and should never prevent the command bar
-    // from opening if tabs changed while the cleanup was in progress.
-    console.info("Could not clean up tabs", error);
-  }
-
   // Reassert the active browser window and tab before injecting. This gives
   // the page a chance to reclaim native focus from browser-owned controls such
   // as the find bar; the overlay follows up by focusing its query input.
@@ -835,6 +825,19 @@ async function openCommandBar(tab) {
     console.info("Using the anchored popup on this protected page", error);
     await openAnchoredFallback(tab);
   }
+
+  // Maintenance must not delay injection: users often begin typing
+  // immediately after the shortcut, while the page still owns input focus.
+  void (async () => {
+    try {
+      await checkForExtensionUpdate();
+      await closeDuplicateTabs(tab.id);
+      await closeUnfocusedNewTabs();
+    } catch (error) {
+      // Duplicate cleanup is optional and should never affect the command bar.
+      console.info("Could not clean up tabs", error);
+    }
+  })();
 }
 
 chrome.runtime.onMessage.addListener((message, sender) => handleOverlayMessage(message, sender));
