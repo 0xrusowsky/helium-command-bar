@@ -404,7 +404,9 @@ export function bookmarksInFolders(bookmarks, selectedFolderIds = null) {
   if (!Array.isArray(selectedFolderIds)) return bookmarks || [];
   const selectedFolders = new Set(selectedFolderIds);
   return (bookmarks || []).filter((bookmark) =>
-    selectedFolders.has(bookmark.parentFolderId)
+    (bookmark.folderIds || [bookmark.parentFolderId]).some((folderId) =>
+      selectedFolders.has(folderId)
+    )
   );
 }
 

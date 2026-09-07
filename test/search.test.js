@@ -228,7 +228,13 @@ test("flattens and filters bookmarks that are not already open", () => {
   );
   assert.equal(filterBookmarks(bookmarks, "chrome", []).length, 1);
   assert.deepEqual(filterBookmarks(bookmarks, "", [], ["folder"]).map((item) => item.id), ["b2"]);
+  assert.deepEqual(filterBookmarks(bookmarks, "", [], ["root"]).map((item) => item.id), ["b2", "b1"]);
   assert.deepEqual(filterBookmarks(bookmarks, "", [], []).map((item) => item.id), []);
+  assert.deepEqual(filterBookmarks([{
+    id: "ai-cost",
+    title: "ai-cost",
+    url: "https://ai.tehq.net/"
+  }], "ai", []).map((item) => item.id), ["ai-cost"]);
 
   const [favoriteTab] = attachBookmarkMetadata([{
     id: 9,

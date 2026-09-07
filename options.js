@@ -172,13 +172,16 @@ function collectBookmarkFolders(nodes) {
 
   function visit(node, depth, ancestors) {
     if (node.url) return;
-    const hasVisibleTitle = Boolean(node.title);
+    const children = node.children || [];
+    const hasDirectBookmarks = children.some((child) => Boolean(child.url));
+    const title = node.title || (hasDirectBookmarks ? "Bookmarks bar" : "");
+    const hasVisibleTitle = Boolean(title);
     const nextDepth = hasVisibleTitle ? depth + 1 : depth;
     const nextAncestors = hasVisibleTitle ? [...ancestors, node.id] : ancestors;
     if (hasVisibleTitle) {
-      folders.push({ id: node.id, title: node.title, depth, ancestors });
+      folders.push({ id: node.id, title, depth, ancestors });
     }
-    for (const child of node.children || []) visit(child, nextDepth, nextAncestors);
+    for (const child of children) visit(child, nextDepth, nextAncestors);
   }
 
   for (const node of nodes || []) visit(node, 0, []);
