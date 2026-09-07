@@ -426,6 +426,11 @@
     return rowElement;
   }
 
+  function makeHistoryRow(row, index) {
+    const history = { ...row.history, folder: "History" };
+    return makeBookmarkRow({ bookmark: history }, index);
+  }
+
   function makeClosedRow(row, index) {
     const { closed } = row;
     const rowElement = element("li", "result-row recently-closed-row");
@@ -574,7 +579,7 @@
       search: makeResultSection("Search"),
       open: makeResultSection("Open"),
       favorites: makeResultSection("Bookmarks"),
-      closed: makeResultSection("Recently closed")
+      closed: makeResultSection("History")
     };
     navigationItems = [];
     let rowIndex = 0;
@@ -648,6 +653,7 @@
       if (row.kind === "tab") rowElement = makeTabRow(row, navigationItems.length);
       else if (row.kind === "bookmark") rowElement = makeBookmarkRow(row, navigationItems.length);
       else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
+      else if (row.kind === "history") rowElement = makeHistoryRow(row, navigationItems.length);
       else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update") rowElement = makeSettingRow(row, navigationItems.length);
       else if (row.kind === "tab-action") rowElement = makeTabActionRow(row, navigationItems.length);
       else rowElement = makeLaunchRow(row, navigationItems.length);
@@ -655,7 +661,9 @@
         ? sections.search
         : row.kind === "bookmark"
           ? sections.favorites
-          : row.kind === "closed" ? sections.closed : sections.open;
+          : row.kind === "closed" || row.kind === "history"
+            ? sections.closed
+            : sections.open;
       section.list.append(bindNavigationItem(rowElement, { kind: "row", row }));
       rowIndex += 1;
     }
@@ -729,6 +737,16 @@
         type: "helium-command-bar:restore-session",
         sessionId: item.row.closed.sessionId
       });
+    } else if (item.row.kind === "history") {
+      await sendAction(item.row.history.sessionId
+        ? {
+            type: "helium-command-bar:restore-session",
+            sessionId: item.row.history.sessionId
+          }
+        : {
+            type: "helium-command-bar:open-history",
+            url: item.row.history.url
+          });
     } else if (item.row.kind === "setting" || item.row.kind === "extension-setting") {
       await sendAction({
         type: "helium-command-bar:open-setting",

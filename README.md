@@ -55,14 +55,14 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 
 ## Usage
 
-- Results are grouped into **Open**, **Bookmarks**, and **Recently closed** sections, in that order. A **Search** section appears above them only after you start typing and includes matching Helium settings destinations.
+- Results are grouped into **Open**, **Bookmarks**, and **History** sections, in that order. History combines recently closed tabs with matching URLs from the browser's full history without duplicates. A **Search** section appears above them after you type and includes matching Helium settings destinations.
 - **Bookmarks** are read from your browser bookmarks and retain their cached site favicon without an extra star badge. Type **Add to Favorites** or **Remove from Favorites** to update the current page's bookmark. A bookmark already open in any window appears only under **Open**, never under **Bookmarks**, but continues to use its custom bookmark name and gains a right-aligned star indicator.
-- Start typing to filter open tabs, bookmarks, and recently closed tabs. Exact URL host/path components are ranked above partial URL matches—for example, `github.com/tempoxyz/tempo` outranks `github.com/tempoxyz/zones` for `tempo`.
+- Start typing to filter open tabs, bookmarks, recently closed tabs, and the browser's full URL history. Exact URL host/path components are ranked above partial URL matches—for example, `github.com/tempoxyz/tempo` outranks `github.com/tempoxyz/zones` for `tempo`.
 - The tab from which the command bar was invoked is omitted from **Open**. Type **Pin tab** or **Unpin tab** to change its pinned state. Pinned results use a right-aligned Arc-style pushpin indicator.
 - Enter hints appear only on the selected result. Open-tab rows show a close button only while hovered and not selected; the selected row shows its Enter hint instead.
 - Redundant site branding is removed from displayed tab titles—for example, `GitHub - imputnet/helium` is shown as `imputnet/helium`. Bookmark names take precedence for open favorites. Fuzzy search still uses the original page title, bookmark name, and URL, so searching for `github` continues to find them.
 - Split views are always selected as one block first. Press **Right Arrow** to enter individual tab navigation and **Left Arrow** to return to the complete group. Compact mode also expands and collapses the visual rows; expanded mode keeps both rows visible while entering or exiting their navigation. A search matching either pane keeps both entries visible.
-- Recently closed results are marked **Restore**; selecting one restores the tab or closed window.
+- History results have one consistent appearance. When Chromium can restore a recently closed tab or window, the command bar does so automatically; otherwise it reopens the URL.
 - Press **Up/Down** to select an item and **Enter** to activate or restore it.
 - Press **Control + Tab** or **Control + Shift + Tab** to open the tab viewer, cycle through split-aware blocks, and switch when Control is released.
 - As soon as you type, opening the URL or searching with the default search engine is always the first selected option.
@@ -140,6 +140,7 @@ The archive is written to `dist/` from an explicit runtime-file allowlist. Store
 - `activeTab` and `scripting`: show the isolated command-bar overlay over the current page only when explicitly invoked.
 - `tabs`: read open-tab titles and URLs and activate/close selected tabs.
 - `bookmarks`: read browser bookmarks for the **Bookmarks** section and add/remove a bookmark only when the corresponding command-bar action is selected.
+- `history`: search previously visited URLs after text is entered in the command bar.
 - `favicon`: retrieve browser-cached site icons for bookmark results. Only Chromium's `_favicon` endpoint is exposed to webpages so content-script results can load cached icons; no extension HTML or JavaScript is web-accessible.
 - `sessions`: list and restore recently closed tabs and windows.
 - `search`: query Helium's configured default search provider.

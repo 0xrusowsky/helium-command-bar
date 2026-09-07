@@ -5,6 +5,7 @@ import {
   bookmarksInFolders,
   displayTabTitle,
   filterBookmarks,
+  filterHistory,
   filterRecentlyClosed,
   filterSettings,
   filterTabActions,
@@ -35,6 +36,8 @@ let allTabs = [];
 let invokingTabId = null;
 let allBookmarks = [];
 let recentlyClosedSessions = [];
+let historyItems = [];
+let historyQueryGeneration = 0;
 let updateState = null;
 let rows = [];
 let navigationItems = [];
@@ -90,8 +93,16 @@ function updateRows({ resetSelection = false } = {}) {
     ? filterRecentlyClosed(recentlyClosedSessions, input)
     : [];
   const matchedBookmarks = showFavorites
-    ? filterBookmarks(allBookmarks, input, allTabs, favoriteFolderIds)
+    ? filterBookmarks(allBookmarks, input, regularTabs, favoriteFolderIds)
     : [];
+  const historyExclusions = [
+    ...allTabs.map((tab) => tab.url || tab.pendingUrl || ""),
+    ...matchedBookmarks.map((bookmark) => bookmark.url),
+    ...recentlyClosedSessions.flatMap((session) => session.tab
+      ? [session.tab.url || session.tab.pendingUrl || ""]
+      : (session.window?.tabs || []).map((tab) => tab.url || tab.pendingUrl || ""))
+  ];
+  const matchedHistory = filterHistory(historyItems, input, historyExclusions);
   const matchedSettings = filterSettings(input);
   const currentRawTab = allTabs.find((tab) => tab.id === invokingTabId) || null;
   const currentTab = currentRawTab
@@ -162,7 +173,20 @@ function updateRows({ resetSelection = false } = {}) {
       kind: "bookmark",
       bookmark: bookmarkWithFavicon(bookmark)
     })),
-    closed: matchedClosed.map((closed) => ({ kind: "closed", closed }))
+    closed: [
+      ...matchedClosed.map((closed) => ({
+        kind: "history",
+        history: {
+          ...closed,
+          sessionId: closed.sessionId,
+          favIconUrl: closed.favIconUrl || bookmarkWithFavicon(closed).favIconUrl
+        }
+      })),
+      ...matchedHistory.map((history) => ({
+        kind: "history",
+        history: bookmarkWithFavicon(history)
+      }))
+    ]
   };
   rows = [
     ...searchRows,
@@ -171,13 +195,14 @@ function updateRows({ resetSelection = false } = {}) {
 
   if (resetSelection) selectedIndex = 0;
 
-  const totalMatches = matchedSettings.length + matchedTabActions.length + openRows.length + matchedBookmarks.length + matchedClosed.length;
+  const totalMatches = matchedSettings.length + matchedTabActions.length + openRows.length + matchedBookmarks.length + matchedClosed.length + matchedHistory.length;
+  const matchLabel = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length + matchedHistory.length} history`;
   if (!input.trim()) {
-    resultLabel.textContent = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
+    resultLabel.textContent = matchLabel;
   } else if (totalMatches === 0) {
     resultLabel.textContent = "No matching tabs";
   } else {
-    resultLabel.textContent = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
+    resultLabel.textContent = matchLabel;
   }
 
   emptyElement.hidden = rows.length !== 0;
@@ -456,6 +481,11 @@ function makeBookmarkRow(row, index) {
   return element;
 }
 
+function makeHistoryRow(row, index) {
+  const history = { ...row.history, folder: "History" };
+  return makeBookmarkRow({ bookmark: history }, index);
+}
+
 function makeClosedRow(row, index) {
   const { closed } = row;
   const element = document.createElement("li");
@@ -645,7 +675,7 @@ function renderRows() {
     search: makeResultSection("Search"),
     open: makeResultSection("Open"),
     favorites: makeResultSection("Bookmarks"),
-    closed: makeResultSection("Recently closed")
+    closed: makeResultSection("History")
   };
   navigationItems = [];
   let rowIndex = 0;
@@ -719,6 +749,7 @@ function renderRows() {
     if (row.kind === "tab") element = makeTabRow(row, navigationItems.length);
     else if (row.kind === "bookmark") element = makeBookmarkRow(row, navigationItems.length);
     else if (row.kind === "closed") element = makeClosedRow(row, navigationItems.length);
+    else if (row.kind === "history") element = makeHistoryRow(row, navigationItems.length);
     else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update") element = makeSettingRow(row, navigationItems.length);
     else if (row.kind === "tab-action") element = makeTabActionRow(row, navigationItems.length);
     else element = makeLaunchRow(row, navigationItems.length);
@@ -726,7 +757,9 @@ function renderRows() {
       ? sections.search
       : row.kind === "bookmark"
         ? sections.favorites
-        : row.kind === "closed" ? sections.closed : sections.open;
+        : row.kind === "closed" || row.kind === "history"
+          ? sections.closed
+          : sections.open;
     section.list.append(bindNavigationItem(element, { kind: "row", row }));
     rowIndex += 1;
   }
@@ -855,6 +888,9 @@ async function activateNavigationItem(index = selectedIndex) {
     await openBookmark(item.row.bookmark);
   } else if (item.row.kind === "closed") {
     await restoreSession(item.row.closed);
+  } else if (item.row.kind === "history") {
+    if (item.row.history.sessionId) await restoreSession(item.row.history);
+    else await openInput({ kind: "url", url: item.row.history.url });
   } else if (item.row.kind === "setting" || item.row.kind === "extension-setting") {
     await openSetting(item.row.setting, item.row.tab);
   } else if (item.row.kind === "update" || item.row.kind === "extension-update") {
@@ -939,10 +975,28 @@ async function loadRecentlyClosed() {
   }
 }
 
+async function loadHistory(query) {
+  const generation = ++historyQueryGeneration;
+  const text = query.trim();
+  try {
+    const items = text && chrome.history
+      ? await chrome.history.search({ text, startTime: 0, maxResults: 500 })
+      : [];
+    if (generation !== historyQueryGeneration) return;
+    historyItems = items;
+    updateRows({ resetSelection: true });
+  } catch (error) {
+    historyItems = [];
+    console.error("Could not query history", error);
+  }
+}
+
 queryInput.addEventListener("input", () => {
   splitNavigationKeys.clear();
   expandedSettingIds.clear();
+  historyItems = [];
   updateRows({ resetSelection: true });
+  void loadHistory(queryInput.value);
 });
 queryInput.addEventListener("keydown", async (event) => {
   if (event.isComposing) return;

@@ -10,6 +10,7 @@ import {
   displayTabTitle,
   duplicateTabIds,
   filterBookmarks,
+  filterHistory,
   filterRecentlyClosed,
   filterSettings,
   filterTabActions,
@@ -387,6 +388,20 @@ test("searches every tab in a recently closed window", () => {
 
   assert.equal(filterRecentlyClosed(sessions, "important docs")[0].sessionId, "window-1");
   assert.equal(filterRecentlyClosed(sessions, "missing").length, 0);
+});
+
+test("filters deep browser history and excludes URLs already represented", () => {
+  const history = [
+    { title: "Tempo documentation", url: "https://docs.tempo.xyz/guide", lastVisitTime: 10 },
+    { title: "Tempo repository", url: "https://github.com/tempoxyz/tempo", lastVisitTime: 20 },
+    { title: "New Tab", url: "chrome://newtab/", lastVisitTime: 30 }
+  ];
+
+  assert.deepEqual(
+    filterHistory(history, "tempo", ["https://docs.tempo.xyz/guide"]).map((item) => item.url),
+    ["https://github.com/tempoxyz/tempo"]
+  );
+  assert.deepEqual(filterHistory(history, ""), []);
 });
 
 test("sorts recently closed sessions by recency", () => {

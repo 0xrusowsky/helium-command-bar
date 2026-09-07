@@ -9,6 +9,7 @@ import {
   displayTabTitle,
   duplicateTabIds,
   filterBookmarks,
+  filterHistory,
   filterRecentlyClosed,
   filterSettings,
   filterTabActions,
@@ -264,10 +265,13 @@ function tabForOverlay(tab) {
 
 async function queryRows(query, requesterTab) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions, bookmarks, css, settings, updateState] = await Promise.all([
+  const [tabs, sessions, bookmarks, historyItems, css, settings, updateState] = await Promise.all([
     chrome.tabs.query({}),
     chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
     getBookmarks(),
+    input.trim() && chrome.history
+      ? chrome.history.search({ text: input, startTime: 0, maxResults: 500 })
+      : Promise.resolve([]),
     getCommandBarCss(),
     chrome.storage.sync.get({
       defaultSplitMode: "compact",
@@ -292,7 +296,15 @@ async function queryRows(query, requesterTab) {
     : filterRecentlyClosed(sessions, input);
   const matchedBookmarks = settings.showFavorites === false
     ? []
-    : filterBookmarks(bookmarks, input, tabs, settings.favoriteFolderIds);
+    : filterBookmarks(bookmarks, input, regularTabs, settings.favoriteFolderIds);
+  const historyExclusions = [
+    ...tabs.map((tab) => tab.url || tab.pendingUrl || ""),
+    ...matchedBookmarks.map((bookmark) => bookmark.url),
+    ...sessions.flatMap((session) => session.tab
+      ? [session.tab.url || session.tab.pendingUrl || ""]
+      : (session.window?.tabs || []).map((tab) => tab.url || tab.pendingUrl || ""))
+  ];
+  const matchedHistory = filterHistory(historyItems, input, historyExclusions);
   const matchedSettings = filterSettings(input);
   const currentActionTab = attachBookmarkMetadata([requesterTab], configuredBookmarks)[0];
   const matchedTabActions = filterTabActions(input, currentActionTab);
@@ -365,7 +377,20 @@ async function queryRows(query, requesterTab) {
       kind: "bookmark",
       bookmark: bookmarkForOverlay(bookmark)
     })),
-    closed: matchedClosed.map((closed) => ({ kind: "closed", closed }))
+    closed: [
+      ...matchedClosed.map((closed) => ({
+        kind: "history",
+        history: {
+          ...closed,
+          sessionId: closed.sessionId,
+          favIconUrl: closed.favIconUrl || faviconUrlForPage(closed.url)
+        }
+      })),
+      ...matchedHistory.map((history) => ({
+        kind: "history",
+        history: { ...history, favIconUrl: faviconUrlForPage(history.url) }
+      }))
+    ]
   };
   const rows = [
     ...searchRows,
@@ -374,7 +399,7 @@ async function queryRows(query, requesterTab) {
 
   let label;
   if (!input.trim() || rows.length > 1) {
-    label = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length} recently closed`;
+    label = `${openRows.length} open · ${matchedBookmarks.length} bookmarks · ${matchedClosed.length + matchedHistory.length} history`;
   } else {
     label = "No matching tabs";
   }
@@ -588,6 +613,13 @@ async function handleOverlayMessage(message, sender) {
           windowId: sender.tab.windowId
         });
       }
+      return { ok: true };
+    }
+
+    case "helium-command-bar:open-history": {
+      const target = resolveInput(typeof message.url === "string" ? message.url.slice(0, 4096) : "");
+      if (target?.kind !== "url") throw new Error("Invalid history URL");
+      await chrome.tabs.create({ url: target.url, active: true, windowId: sender.tab.windowId });
       return { ok: true };
     }
 

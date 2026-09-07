@@ -411,11 +411,11 @@ export function bookmarksInFolders(bookmarks, selectedFolderIds = null) {
 export function filterBookmarks(
   bookmarks,
   query,
-  openTabs,
+  representedOpenTabs,
   selectedFolderIds = null,
   limit = 100
 ) {
-  const openUrls = new Set((openTabs || [])
+  const openUrls = new Set((representedOpenTabs || [])
     .map((tab) => bookmarkUrlKey(tab.url || tab.pendingUrl || ""))
     .filter(Boolean));
   return filterTabs(
@@ -545,6 +545,40 @@ export function sessionToItem(session) {
     searchableTitle: tabs.map((tab) => tab.title || "").join(" "),
     searchableUrl: tabs.map((tab) => tab.url || tab.pendingUrl || "").join(" ")
   };
+}
+
+export function filterHistory(historyItems, query, excludedUrls = [], limit = 50) {
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return [];
+
+  const excluded = new Set((excludedUrls || []).map(bookmarkUrlKey).filter(Boolean));
+  const seen = new Set();
+  const scored = (historyItems || [])
+    .filter((item) => {
+      const key = bookmarkUrlKey(item?.url || "");
+      if (!key || excluded.has(key) || seen.has(key) || isIgnoredRecentlyClosedTab(item)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((item) => ({
+      item: {
+        title: cleanTabTitle(item) || item.url,
+        url: item.url,
+        lastVisitTime: item.lastVisitTime || 0,
+        visitCount: item.visitCount || 0,
+        typedCount: item.typedCount || 0
+      },
+      score: scoreTab(item, normalizedQuery)
+    }))
+    .filter(({ score }) => score !== null);
+
+  scored.sort((left, right) =>
+    right.score - left.score ||
+    (right.item.typedCount - left.item.typedCount) ||
+    (right.item.visitCount - left.item.visitCount) ||
+    (right.item.lastVisitTime - left.item.lastVisitTime)
+  );
+  return scored.slice(0, limit).map(({ item }) => item);
 }
 
 export function filterRecentlyClosed(sessions, query) {
