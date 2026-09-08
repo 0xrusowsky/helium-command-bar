@@ -132,7 +132,17 @@ function fieldScore(token, field, weight) {
   if (field === token) return 1000 * weight;
   if (field.startsWith(token)) return (600 - token.length) * weight;
 
-  const substringIndex = field.indexOf(token);
+  let substringIndex = field.indexOf(token);
+  if (token.length <= 2) {
+    while (substringIndex !== -1) {
+      if (/[^\p{L}\p{N}]/u.test(field[substringIndex - 1] || "")) {
+        return (400 - Math.min(substringIndex, 100)) * weight;
+      }
+      substringIndex = field.indexOf(token, substringIndex + 1);
+    }
+    return null;
+  }
+
   if (substringIndex !== -1) {
     return (400 - Math.min(substringIndex, 100)) * weight;
   }
@@ -165,7 +175,7 @@ function urlComponentScore(token, value) {
       let score = null;
       if (part === token) score = isFinalPathPart ? 950 : 800;
       else if (part.startsWith(token)) score = isFinalPathPart ? 600 : 450;
-      else if (part.includes(token)) score = 250;
+      else if (token.length > 2 && part.includes(token)) score = 250;
       if (score !== null) best = Math.max(best ?? -Infinity, score);
     });
     return best;

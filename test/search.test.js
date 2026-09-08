@@ -121,6 +121,12 @@ test("supports dense fuzzy title matching", () => {
   assert.equal(scoreTab(tabs[2], "ext doc"), null);
 });
 
+test("requires short queries to match a word or URL component prefix", () => {
+  assert.notEqual(scoreTab({ title: "tempo-ai-cost", url: "https://ai.tehq.net/" }, "ai"), null);
+  assert.equal(scoreTab({ title: "Tempo blockchain", url: "https://github.com/tempoxyz/tempo" }, "ai"), null);
+  assert.equal(scoreTab({ title: "Queueing messages easily", url: "https://x.com/example" }, "ai"), null);
+});
+
 test("rejects sparse subsequences in unrelated titles", () => {
   assert.equal(scoreTab({
     title: "Settings – Keyboard shortcuts",
