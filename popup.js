@@ -220,8 +220,33 @@ function updateRows({ resetSelection = false } = {}) {
   renderRows();
 }
 
+const footerHints = {
+  window: document.querySelector("#window-help"),
+  incognito: document.querySelector("#incognito-help"),
+  expand: document.querySelector("#expand-help"),
+  back: document.querySelector("#back-help"),
+  close: document.querySelector("#close-help")
+};
+if (!(navigator.userAgentData?.platform === "macOS" || /Mac/.test(navigator.platform))) {
+  for (const key of document.querySelectorAll(".modifier-key")) key.textContent = "Ctrl";
+}
+
+// Show only the shortcuts that apply to the current input and selection.
+function updateFooterHints() {
+  const item = navigationItems[selectedIndex];
+  const hasLaunchTarget = Boolean(resolveInput(queryInput.value));
+  footerHints.window.hidden = !hasLaunchTarget;
+  footerHints.incognito.hidden = !hasLaunchTarget;
+  footerHints.expand.hidden = !(item?.kind === "split-group" || (item?.kind === "row" && item.row.expandable));
+  footerHints.back.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.parentSettingId));
+  footerHints.close.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.kind === "tab"));
+}
+
 function setSelected(index, { scroll = true } = {}) {
-  if (!navigationItems.length) return;
+  if (!navigationItems.length) {
+    updateFooterHints();
+    return;
+  }
   selectedIndex = (index + navigationItems.length) % navigationItems.length;
 
   navigationItems.forEach((item, itemIndex) => {
@@ -233,6 +258,7 @@ function setSelected(index, { scroll = true } = {}) {
   const selectedElement = navigationItems[selectedIndex]?.element;
   queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
   if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+  updateFooterHints();
 }
 
 function isArrowKey(event, direction, keyCode) {

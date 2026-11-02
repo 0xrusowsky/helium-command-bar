@@ -149,14 +149,27 @@
   resultsElement.setAttribute("role", "listbox");
   resultsElement.setAttribute("aria-label", "Command results");
 
+  const modifierKey = isMac ? "⌘" : "Ctrl";
+  function footerHint(keys, label, className = "") {
+    const hint = element("span", className);
+    hint.append(...keys.map((key) => element("kbd", "", key)), document.createTextNode(` ${label}`));
+    return hint;
+  }
   const footer = element("footer");
-  const selectHelp = element("span");
-  selectHelp.append(element("kbd", "", "↑"), element("kbd", "", "↓"), document.createTextNode(" select"));
-  const openHelp = element("span");
-  openHelp.append(element("kbd", "", "↵"), document.createTextNode(" open"));
-  const closeHelp = element("span");
-  closeHelp.append(element("kbd", "", "⌘⌫"), document.createTextNode(" close tab"));
-  footer.append(selectHelp, openHelp, closeHelp);
+  const windowHelp = footerHint(["⇧↵"], "new window");
+  const incognitoHelp = footerHint([`${modifierKey}⇧↵`], "incognito");
+  const expandHelp = footerHint(["→"], "expand");
+  const backHelp = footerHint(["←"], "back");
+  const closeHelp = footerHint([`${modifierKey}⌫`], "close tab", "footer-end");
+  footer.append(
+    footerHint(["↑", "↓"], "select"),
+    footerHint(["↵"], "open"),
+    windowHelp,
+    incognitoHelp,
+    expandHelp,
+    backHelp,
+    closeHelp
+  );
 
   commandBar.append(searchBox, currentTabElement, resultLabel, emptyElement, resultsElement, footer);
   backdrop.append(commandBar);
@@ -231,8 +244,22 @@
     }
   }
 
+  // Show only the shortcuts that apply to the current input and selection.
+  function updateFooterHints() {
+    const item = navigationItems[selectedIndex];
+    const hasLaunchTarget = rows.some((row) => row.kind === "launch");
+    windowHelp.hidden = !hasLaunchTarget;
+    incognitoHelp.hidden = !hasLaunchTarget;
+    expandHelp.hidden = !(item?.kind === "split-group" || (item?.kind === "row" && item.row.expandable));
+    backHelp.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.parentSettingId));
+    closeHelp.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.kind === "tab"));
+  }
+
   function setSelected(index, { scroll = true } = {}) {
-    if (!navigationItems.length) return;
+    if (!navigationItems.length) {
+      updateFooterHints();
+      return;
+    }
     selectedIndex = (index + navigationItems.length) % navigationItems.length;
 
     navigationItems.forEach((item, itemIndex) => {
@@ -244,6 +271,7 @@
     const selectedElement = navigationItems[selectedIndex]?.element;
     queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
     if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+    updateFooterHints();
   }
 
   function isArrowKey(event, direction, keyCode) {
