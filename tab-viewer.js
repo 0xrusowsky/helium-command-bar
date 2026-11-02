@@ -257,8 +257,19 @@
     backdrop.addEventListener("mousedown", (event) => {
       if (event.target === backdrop) send("helium-tab-viewer:cancel");
     });
+    // The viewer usually appears under a stationary cursor, and Chromium then
+    // dispatches hover events (and synthetic mousemoves after re-renders)
+    // without real pointer movement. Only actual movement changes selection.
+    backdrop.addEventListener("mousemove", (event) => {
+      pointerMoved = lastPointerPosition !== null &&
+        (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+      lastPointerPosition = { x: event.screenX, y: event.screenY };
+    }, { capture: true });
     shadow.append(style, backdrop);
   }
+
+  let pointerMoved = false;
+  let lastPointerPosition = null;
 
   function render(message) {
     currentSessionId = message.sessionId;
@@ -316,7 +327,8 @@
         row.addEventListener("click", () => {
           send("helium-tab-viewer:select", { blockKey: item.key });
         });
-        row.addEventListener("mouseenter", () => {
+        row.addEventListener("mousemove", () => {
+          if (!pointerMoved || row.classList.contains("selected")) return;
           for (const candidate of list.querySelectorAll(":scope > .row")) {
             const selected = candidate === row;
             candidate.classList.toggle("selected", selected);

@@ -664,7 +664,9 @@ function bindNavigationItem(element, item) {
   element.dataset.navigationIndex = String(index);
   element.addEventListener("mousedown", (event) => event.preventDefault());
   element.addEventListener("click", () => activateNavigationItem(index));
-  element.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+  element.addEventListener("mousemove", () => {
+    if (pointerMoved && selectedIndex !== index) setSelected(index, { scroll: false });
+  });
   return element;
 }
 
@@ -1002,6 +1004,17 @@ async function loadHistory(query) {
     console.error("Could not query history", error);
   }
 }
+
+// The UI can appear under a stationary cursor, and Chromium then dispatches
+// hover events (and synthetic mousemoves after re-renders or scrolling)
+// without real pointer movement. Only let actual movement change selection.
+let pointerMoved = false;
+let lastPointerPosition = null;
+document.addEventListener("mousemove", (event) => {
+  pointerMoved = lastPointerPosition !== null &&
+    (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+  lastPointerPosition = { x: event.screenX, y: event.screenY };
+}, { capture: true });
 
 queryInput.addEventListener("input", () => {
   splitNavigationKeys.clear();

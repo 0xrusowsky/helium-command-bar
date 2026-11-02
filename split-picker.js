@@ -12,6 +12,17 @@ const errorElement = document.querySelector("#error");
 
 let rows = [];
 let selectedIndex = 0;
+
+// The page can load under a stationary cursor, and Chromium then dispatches
+// hover events (and synthetic mousemoves after re-renders or scrolling)
+// without real pointer movement. Only let actual movement change selection.
+let pointerMoved = false;
+let lastPointerPosition = null;
+document.addEventListener("mousemove", (event) => {
+  pointerMoved = lastPointerPosition !== null &&
+    (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+  lastPointerPosition = { x: event.screenX, y: event.screenY };
+}, { capture: true });
 let queryGeneration = 0;
 let busy = false;
 
@@ -118,7 +129,9 @@ function createActionRow(row, index) {
   trailing.textContent = row.kind === "launch" ? "↵" : row.kind === "tab" ? "Open" : "Recent";
   element.append(details, trailing);
   element.addEventListener("mousedown", (event) => event.preventDefault());
-  element.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+  element.addEventListener("mousemove", () => {
+    if (pointerMoved && selectedIndex !== index) setSelected(index, { scroll: false });
+  });
   element.addEventListener("click", () => activate(index));
   return element;
 }

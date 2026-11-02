@@ -560,7 +560,9 @@
     rowElement.dataset.navigationIndex = String(index);
     rowElement.addEventListener("mousedown", (event) => event.preventDefault());
     rowElement.addEventListener("click", () => activateNavigationItem(index));
-    rowElement.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+    rowElement.addEventListener("mousemove", () => {
+      if (pointerMoved && selectedIndex !== index) setSelected(index, { scroll: false });
+    });
     return rowElement;
   }
 
@@ -809,6 +811,18 @@
       queryInput.focus();
     }
   }
+
+  // The overlay often appears under a stationary cursor, and Chromium then
+  // dispatches hover events (and synthetic mousemoves after re-renders or
+  // scrolling) without any real pointer movement. Only let the pointer change
+  // the selection when its screen position actually changed.
+  let pointerMoved = false;
+  let lastPointerPosition = null;
+  backdrop.addEventListener("mousemove", (event) => {
+    pointerMoved = lastPointerPosition !== null &&
+      (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+    lastPointerPosition = { x: event.screenX, y: event.screenY };
+  }, { capture: true });
 
   backdrop.addEventListener("mousedown", (event) => {
     if (event.target === backdrop) closeCommandBar();
