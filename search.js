@@ -75,6 +75,35 @@ export const SETTINGS_ENTRIES = Object.freeze([
     keywords: "bookmarks favorites favourites manage edit organize folders library",
     icon: "bookmarks",
     aliases: ["helium://bookmarks", "chrome://bookmarks"]
+  }),
+  // Extensions cannot enumerate or open other profiles directly, so profile
+  // commands route through Chromium's own profile picker and settings pages.
+  Object.freeze({
+    id: "switch-profile",
+    title: "Switch profile",
+    url: "chrome://profile-picker",
+    description: "Choose another Helium profile",
+    keywords: "profiles person people user account switch change open work personal",
+    icon: "profile",
+    aliases: ["chrome://profile-picker", "helium://profile-picker"]
+  }),
+  Object.freeze({
+    id: "add-profile",
+    title: "Add profile",
+    url: "chrome://profile-picker/new-profile",
+    description: "Create a new Helium profile",
+    keywords: "profiles new create person people user account",
+    icon: "profile",
+    aliases: ["chrome://profile-picker/new-profile", "helium://profile-picker/new-profile"]
+  }),
+  Object.freeze({
+    id: "manage-profile",
+    title: "Customize profile",
+    url: "helium://settings/manageProfile",
+    description: "Change this profile's name, avatar, and color",
+    keywords: "profiles edit rename avatar color person people user account",
+    icon: "profile",
+    aliases: ["helium://settings/manageProfile", "chrome://settings/manageProfile"]
   })
 ]);
 

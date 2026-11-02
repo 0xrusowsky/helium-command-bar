@@ -453,3 +453,10 @@ test("routes tab favicons through the extension cache to avoid local network req
   assert.equal(cachedFaviconUrl(endpoint, undefined), "");
 });
 
+test("finds profile destinations", () => {
+  assert.equal(filterSettings("switch profile")[0].id, "switch-profile");
+  assert.equal(filterSettings("add profile")[0].id, "add-profile");
+  assert.equal(filterSettings("rename profile")[0].id, "manage-profile");
+  assert.equal(getSettingForTab({ url: "chrome://profile-picker/new-profile" }).id, "add-profile");
+});
+
