@@ -10,12 +10,14 @@
     "bookmarks",
     "favicon",
     "history",
-    "management",
     "scripting",
     "search",
     "sessions",
     "storage",
     "tabs"
+  ],
+  "optional_permissions": [
+    "management"
   ],
   "optional_host_permissions": [
     "<all_urls>"

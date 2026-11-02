@@ -93,6 +93,7 @@ h2 {
 
 #save-status,
 #blur-status,
+#extension-search-status,
 #results-status,
 #duplicates-status,
 #theme-status {
@@ -108,13 +109,15 @@ h2 {
 
 #save-status.visible,
 #blur-status.visible,
+#extension-search-status.visible,
 #results-status.visible,
 #duplicates-status.visible,
 #theme-status.visible {
   opacity: 1;
 }
 
-#blur-status.error {
+#blur-status.error,
+#extension-search-status.error {
   background: rgba(190, 45, 45, 0.1);
   color: #c94b4b;
 }

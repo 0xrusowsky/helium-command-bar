@@ -187,6 +187,27 @@
         <p class="permission-note">This optional feature requires access to webpages in split panes. Helium describes that permission as “read and change data on all websites,” although the extension only injects pointer-events-free ring and blur layers. Protected browser pages cannot be highlighted or blurred.</p>
       </section>
 
+      <section aria-labelledby="extension-search-heading">
+        <div class="section-heading">
+          <div>
+            <h2 id="extension-search-heading">Extension search</h2>
+            <p>Find installed extensions by name and open their options, enable or disable them, or show their details.</p>
+          </div>
+          <span id="extension-search-status" role="status" aria-live="polite"></span>
+        </div>
+
+        <label class="toggle-row">
+          <span>
+            <strong>Search installed extensions</strong>
+            <small>Show matching extensions in the command bar's Search section.</small>
+          </span>
+          <input id="extension-search" type="checkbox" role="switch">
+          <i aria-hidden="true"></i>
+        </label>
+
+        <p class="permission-note">This optional feature requires the management permission, which Helium describes as “manage your apps, extensions, and themes.” Turning it off removes the permission.</p>
+      </section>
+
       <section aria-labelledby="arc-setup-heading">
         <div class="section-heading">
           <div>

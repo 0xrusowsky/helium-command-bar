@@ -36,6 +36,7 @@ import { checkForExtensionUpdate, getExtensionUpdateState } from "./update.js";
 
 const NATIVE_SPLIT_PICKER_URL = "chrome://tab-search.top-chrome/split_new_tab_page.html";
 const VISUAL_PERMISSION = { origins: ["<all_urls>"] };
+const MANAGEMENT_PERMISSION = { permissions: ["management"] };
 const interceptingSplitTabs = new Set();
 const blurredPartnersByOwner = new Map();
 const inactiveEffectByTab = new Map();
@@ -72,6 +73,13 @@ function getBookmarks() {
     bookmarkCachePromise = chrome.bookmarks.getTree().then(flattenBookmarks);
   }
   return bookmarkCachePromise;
+}
+
+// Extension search is opt-in: management is an optional permission granted
+// from the settings page.
+async function getInstalledExtensions() {
+  if (!await chrome.permissions.contains(MANAGEMENT_PERMISSION)) return [];
+  return chrome.management.getAll();
 }
 
 function invalidateBookmarks() {
@@ -286,9 +294,7 @@ async function queryRows(query, requesterTab) {
       resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
     }),
     getExtensionUpdateState(),
-    input.trim() && chrome.management
-      ? chrome.management.getAll()
-      : Promise.resolve([])
+    input.trim() ? getInstalledExtensions() : Promise.resolve([])
   ]);
   const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
   const enabledBookmarks = settings.showFavorites === false ? [] : configuredBookmarks;
@@ -760,7 +766,10 @@ async function handleOverlayMessage(message, sender) {
       return { ok: Boolean(lastScreenshotDataUrl), dataUrl: lastScreenshotDataUrl };
 
     case "helium-command-bar:extension-action": {
-      if (!chrome.management || typeof message.extensionId !== "string") {
+      if (
+        typeof message.extensionId !== "string" ||
+        !await chrome.permissions.contains(MANAGEMENT_PERMISSION)
+      ) {
         throw new Error("Invalid extension");
       }
       const extension = await chrome.management.get(message.extensionId);

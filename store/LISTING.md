@@ -77,9 +77,9 @@ Reads bookmarks for the Bookmarks results section and creates or removes a bookm
 
 Loads browser-cached favicons for bookmark and tab results. Favicons are not sent to the developer.
 
-### management
+### Optional permission: management
 
-Lists installed extensions by name when the user searches for them, opens an extension's options or details page, and enables or disables an extension only when the user chooses that action. Extension information is not sent to the developer.
+Requested only when the user turns on Search installed extensions in the settings page, and removed when it is turned off. Lists installed extensions by name when the user searches for them, opens an extension's options or details page, and enables or disables an extension only when the user chooses that action. Extension information is not sent to the developer.
 
 ### scripting
 
