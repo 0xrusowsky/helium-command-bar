@@ -20,6 +20,7 @@ import {
   getSettingById,
   getSettingForTab,
   isSplitTab,
+  nextZoomLevel,
   normalizeResultSectionOrder,
   resolveInput,
   sessionToItem
@@ -462,6 +463,63 @@ async function querySplitPickerRows(query, pickerTabId) {
   };
 }
 
+async function runTabAction(actionId, tab) {
+  switch (actionId) {
+    case "reload":
+      await chrome.tabs.reload(tab.id);
+      break;
+    case "hard-reload":
+      await chrome.tabs.reload(tab.id, { bypassCache: true });
+      break;
+    case "duplicate":
+      await chrome.tabs.duplicate(tab.id);
+      break;
+    case "toggle-mute":
+      await chrome.tabs.update(tab.id, { muted: !tab.mutedInfo?.muted });
+      break;
+    case "go-back":
+      await chrome.tabs.goBack(tab.id);
+      break;
+    case "go-forward":
+      await chrome.tabs.goForward(tab.id);
+      break;
+    case "close-tab":
+      await chrome.tabs.remove(tab.id);
+      break;
+    case "close-other-tabs":
+    case "close-tabs-right": {
+      // Pinned tabs and the current tab's split partner are never closed.
+      const inSplit = isSplitTab(tab, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
+      const tabIds = (await chrome.tabs.query({ windowId: tab.windowId }))
+        .filter((candidate) =>
+          candidate.id !== tab.id &&
+          !candidate.pinned &&
+          !(inSplit && candidate.splitViewId === tab.splitViewId) &&
+          (actionId === "close-other-tabs" || candidate.index > tab.index)
+        )
+        .map((candidate) => candidate.id);
+      if (tabIds.length) await chrome.tabs.remove(tabIds);
+      break;
+    }
+    case "move-to-new-window":
+      await chrome.windows.create({ tabId: tab.id, focused: true });
+      break;
+    case "zoom-in":
+    case "zoom-out":
+      await chrome.tabs.setZoom(
+        tab.id,
+        nextZoomLevel(await chrome.tabs.getZoom(tab.id), actionId === "zoom-in" ? 1 : -1)
+      );
+      break;
+    case "zoom-reset":
+      await chrome.tabs.setZoom(tab.id, 0);
+      break;
+    default:
+      return { ok: false };
+  }
+  return { ok: true };
+}
+
 async function handleOverlayMessage(message, sender) {
   if (sender.id !== chrome.runtime.id) return undefined;
 
@@ -521,6 +579,15 @@ async function handleOverlayMessage(message, sender) {
     }
     invalidateBookmarks();
     return { ok: true };
+  }
+
+  if (message?.type === "helium-command-bar:tab-action") {
+    const tabId = Number(message.tabId);
+    if (!Number.isInteger(tabId)) throw new Error("Invalid tab");
+    if (sender.tab?.id !== undefined && sender.tab.id !== tabId) {
+      throw new Error("Cannot act on a different tab");
+    }
+    return runTabAction(String(message.actionId), await chrome.tabs.get(tabId));
   }
 
   if (message?.type === "helium-command-bar:activate-tab") {

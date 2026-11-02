@@ -23,6 +23,7 @@ import {
   isIgnoredRecentlyClosedTab,
   isSplitTab,
   normalize,
+  nextZoomLevel,
   normalizeResultSectionOrder,
   resolveInput,
   scoreTab,
@@ -465,4 +466,20 @@ test("offers copying the current tab URL", () => {
   assert.equal(action.id, "copy-url");
   assert.equal(action.url, "https://example.com/a");
   assert.equal(filterTabActions("copy url", { id: 1 }).some((candidate) => candidate.id === "copy-url"), false);
+});
+
+test("offers current-tab actions with icons and caps the result count", () => {
+  const tab = { id: 1, url: "https://example.com" };
+  assert.deepEqual(filterTabActions("zoom", tab).map((action) => action.id), ["zoom-in", "zoom-out", "zoom-reset"]);
+  assert.equal(filterTabActions("mute", { ...tab, mutedInfo: { muted: true } })[0].title, "Unmute tab");
+  assert.ok(filterTabActions("reload", tab)[0].iconPath);
+  assert.ok(filterTabActions("re", tab).length <= 5);
+});
+
+test("steps through browser zoom levels", () => {
+  assert.equal(nextZoomLevel(1, 1), 1.1);
+  assert.equal(nextZoomLevel(1, -1), 0.9);
+  assert.equal(nextZoomLevel(1.2, -1), 1.1);
+  assert.equal(nextZoomLevel(5, 1), 5);
+  assert.equal(nextZoomLevel(0.25, -1), 0.25);
 });

@@ -490,8 +490,8 @@
     rowElement.setAttribute("role", "option");
 
     const iconBox = element("span", `tab-action-icon-box ${action.icon}`);
-    iconBox.append(action.icon === "copy"
-      ? svgIcon("M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Zm-4 6H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1", "setting-icon")
+    iconBox.append(action.iconPath
+      ? svgIcon(action.iconPath, "setting-icon")
       : svgIcon(
           action.icon === "favorite"
             ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
@@ -805,11 +805,17 @@
             favorite: action.nextFavorite,
             bookmarkId: action.bookmarkId
           }
-        : {
-            type: "helium-command-bar:set-pinned",
-            tabId: item.row.tabId,
-            pinned: action.nextPinned
-          });
+        : action.id === "toggle-pin"
+          ? {
+              type: "helium-command-bar:set-pinned",
+              tabId: item.row.tabId,
+              pinned: action.nextPinned
+            }
+          : {
+              type: "helium-command-bar:tab-action",
+              tabId: item.row.tabId,
+              actionId: action.id
+            });
     } else {
       await openInput();
     }

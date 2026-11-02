@@ -258,6 +258,25 @@ export function getSettingById(id) {
   return SETTINGS_ENTRIES.find((setting) => setting.id === id) || null;
 }
 
+// Stroke paths in a 24×24 view box, rendered by the overlay and the popup.
+export const ACTION_ICON_PATHS = Object.freeze({
+  copy: "M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Zm-4 6H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
+  reload: "M21 12a9 9 0 1 1-3-6.7L21 8m0-5v5h-5",
+  duplicate: "M8 8h12v12H8V8Zm-4 8V4h12",
+  mute: "M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6",
+  unmute: "M11 5 6 9H3v6h3l5 4V5Zm4.5 3.5a5 5 0 0 1 0 7",
+  back: "M19 12H5m6-6-6 6 6 6",
+  forward: "M5 12h14m-6-6 6 6-6 6",
+  close: "M6 6l12 12M18 6 6 18",
+  "close-right": "M4 12h10m-4-4 4 4-4 4M20 5v14",
+  "new-window": "M14 5h5v5m0-5L10 14m7 0v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4",
+  "zoom-in": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM10.5 8v5M8 10.5h5",
+  "zoom-out": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM8 10.5h5",
+  "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"
+});
+
+const MAX_TAB_ACTIONS = 5;
+
 export function filterTabActions(query, currentTab) {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery || !currentTab?.id) return [];
@@ -292,7 +311,100 @@ export function filterTabActions(query, currentTab) {
       keywords: "copy current page link address url clipboard share",
       url: currentUrl,
       icon: "copy"
-    }] : [])
+    }] : []),
+    {
+      id: "reload",
+      title: "Reload tab",
+      description: "Reload the current page",
+      keywords: "refresh reload page",
+      icon: "reload"
+    },
+    {
+      id: "hard-reload",
+      title: "Hard reload tab",
+      description: "Reload the current page, ignoring cached content",
+      keywords: "refresh reload bypass cache force",
+      icon: "reload"
+    },
+    {
+      id: "duplicate",
+      title: "Duplicate tab",
+      description: "Open a copy of the current tab",
+      keywords: "duplicate clone copy tab",
+      icon: "duplicate"
+    },
+    {
+      id: "toggle-mute",
+      title: currentTab.mutedInfo?.muted ? "Unmute tab" : "Mute tab",
+      description: currentTab.mutedInfo?.muted
+        ? "Allow the current tab to play sound"
+        : "Silence the current tab",
+      keywords: "mute unmute sound audio silence volume",
+      icon: currentTab.mutedInfo?.muted ? "unmute" : "mute"
+    },
+    {
+      id: "go-back",
+      title: "Go back",
+      description: "Return to the previous page in this tab",
+      keywords: "back history previous navigate",
+      icon: "back"
+    },
+    {
+      id: "go-forward",
+      title: "Go forward",
+      description: "Go to the next page in this tab",
+      keywords: "forward history next navigate",
+      icon: "forward"
+    },
+    {
+      id: "close-tab",
+      title: "Close tab",
+      description: "Close the current tab",
+      keywords: "close tab remove",
+      icon: "close"
+    },
+    {
+      id: "close-other-tabs",
+      title: "Close other tabs",
+      description: "Close unpinned tabs in this window except the current tab",
+      keywords: "close other tabs remove others window",
+      icon: "close"
+    },
+    {
+      id: "close-tabs-right",
+      title: "Close tabs to the right",
+      description: "Close unpinned tabs after the current tab",
+      keywords: "close tabs right after remove",
+      icon: "close-right"
+    },
+    {
+      id: "move-to-new-window",
+      title: "Move tab to new window",
+      description: "Open the current tab in its own window",
+      keywords: "move tab new window detach separate",
+      icon: "new-window"
+    },
+    {
+      id: "zoom-in",
+      title: "Zoom in",
+      description: "Make the current page larger",
+      keywords: "zoom in larger bigger magnify",
+      icon: "zoom-in"
+    },
+    {
+      id: "zoom-out",
+      title: "Zoom out",
+      description: "Make the current page smaller",
+      keywords: "zoom out smaller",
+      icon: "zoom-out"
+    },
+    {
+      id: "zoom-reset",
+      title: "Reset zoom",
+      description: "Return the current page to its default size",
+      keywords: "zoom reset actual size default 100",
+      icon: "zoom-reset"
+    }
   ];
 
   return actions
@@ -305,7 +417,17 @@ export function filterTabActions(query, currentTab) {
     }))
     .filter(({ score }) => score !== null)
     .sort((left, right) => right.score - left.score)
-    .map(({ action }) => action);
+    .slice(0, MAX_TAB_ACTIONS)
+    .map(({ action }) => ACTION_ICON_PATHS[action.icon]
+      ? { ...action, iconPath: ACTION_ICON_PATHS[action.icon] }
+      : action);
+}
+
+const ZOOM_LEVELS = Object.freeze([0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]);
+
+export function nextZoomLevel(current, direction) {
+  if (direction > 0) return ZOOM_LEVELS.find((level) => level > current + 0.001) ?? ZOOM_LEVELS.at(-1);
+  return ZOOM_LEVELS.findLast((level) => level < current - 0.001) ?? ZOOM_LEVELS[0];
 }
 
 // Pages that host the overlay must never load a tab's own favicon URL: a

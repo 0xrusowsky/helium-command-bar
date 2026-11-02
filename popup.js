@@ -555,8 +555,8 @@ function makeTabActionRow(row, index) {
 
   const iconBox = document.createElement("span");
   iconBox.className = `tab-action-icon-box ${action.icon}`;
-  iconBox.append(action.icon === "copy"
-    ? createSvgIcon("M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Zm-4 6H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1", "setting-icon")
+  iconBox.append(action.iconPath
+    ? createSvgIcon(action.iconPath, "setting-icon")
     : createSvgIcon(
         action.icon === "favorite"
           ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
@@ -852,11 +852,17 @@ async function runTabAction(row) {
           favorite: row.action.nextFavorite,
           bookmarkId: row.action.bookmarkId
         }
-      : {
-          type: "helium-command-bar:set-pinned",
-          tabId: row.tabId,
-          pinned: row.action.nextPinned
-        };
+      : row.action.id === "toggle-pin"
+        ? {
+            type: "helium-command-bar:set-pinned",
+            tabId: row.tabId,
+            pinned: row.action.nextPinned
+          }
+        : {
+            type: "helium-command-bar:tab-action",
+            tabId: row.tabId,
+            actionId: row.action.id
+          };
     const response = await chrome.runtime.sendMessage(message);
     if (!response?.ok) throw new Error("The browser did not update the tab");
     closeCommandBar();
