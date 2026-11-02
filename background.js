@@ -418,7 +418,8 @@ async function queryRows(query, requesterTab) {
     label,
     sectionOrder,
     defaultSplitExpanded: settings.defaultSplitMode === "expanded",
-    blurredPartnerIds
+    blurredPartnerIds,
+    currentTab: tabForOverlay(requesterTab)
   };
 }
 
@@ -628,7 +629,17 @@ async function handleOverlayMessage(message, sender) {
       const target = resolveInput(typeof message.input === "string" ? message.input.slice(0, 4096) : "");
       if (!target) return { ok: false };
 
-      if (target.kind === "url") {
+      if (message.currentTab) {
+        if (target.kind === "url") {
+          await chrome.tabs.update(sender.tab.id, { url: target.url });
+        } else if (chrome.search?.query) {
+          await chrome.search.query({ text: target.text, tabId: sender.tab.id });
+        } else {
+          await chrome.tabs.update(sender.tab.id, {
+            url: `https://www.google.com/search?q=${encodeURIComponent(target.text)}`
+          });
+        }
+      } else if (target.kind === "url") {
         await chrome.tabs.create({ url: target.url, active: true, windowId: sender.tab.windowId });
       } else if (chrome.search?.query) {
         chrome.search.query({ text: target.text, disposition: "NEW_TAB" });
@@ -832,7 +843,7 @@ async function promoteCurrentTabToMainWindow() {
   return { ok: true };
 }
 
-async function openCommandBar(tab) {
+async function openCommandBar(tab, { mode = "search" } = {}) {
   if (!tab?.id) return;
 
   // Reassert the active browser window and tab before injecting. This gives
@@ -848,6 +859,15 @@ async function openCommandBar(tab) {
   }
 
   try {
+    if (mode !== "search") {
+      // Injected files cannot receive arguments. The isolated world persists
+      // between injections, so leave the mode where overlay.js consumes it.
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (value) => { globalThis.heliumCommandBarMode = value; },
+        args: [mode]
+      });
+    }
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["overlay.js"]
@@ -888,9 +908,9 @@ chrome.commands.onCommand.addListener(async (command) => {
       await promoteCurrentTabToMainWindow();
       return;
     }
-    if (command !== "open-command-bar") return;
+    if (command !== "open-command-bar" && command !== "edit-current-url") return;
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    await openCommandBar(tab);
+    await openCommandBar(tab, { mode: command === "edit-current-url" ? "edit-url" : "search" });
   } catch (error) {
     console.error(`Could not handle command ${command}`, error);
   }

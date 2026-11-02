@@ -555,12 +555,14 @@ function makeTabActionRow(row, index) {
 
   const iconBox = document.createElement("span");
   iconBox.className = `tab-action-icon-box ${action.icon}`;
-  iconBox.append(createSvgIcon(
-    action.icon === "favorite"
-      ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
-      : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
-    action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
-  ));
+  iconBox.append(action.icon === "copy"
+    ? createSvgIcon("M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Zm-4 6H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1", "setting-icon")
+    : createSvgIcon(
+        action.icon === "favorite"
+          ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
+          : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+        action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
+      ));
 
   const details = document.createElement("span");
   details.className = "result-details";
@@ -838,6 +840,11 @@ async function openInput(target = resolveInput(queryInput.value)) {
 
 async function runTabAction(row) {
   try {
+    if (row.action.id === "copy-url") {
+      await navigator.clipboard.writeText(row.action.url);
+      closeCommandBar();
+      return;
+    }
     const message = row.action.id === "toggle-favorite"
       ? {
           type: "helium-command-bar:set-favorite",

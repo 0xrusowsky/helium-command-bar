@@ -261,6 +261,7 @@ export function getSettingById(id) {
 export function filterTabActions(query, currentTab) {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery || !currentTab?.id) return [];
+  const currentUrl = currentTab.url || currentTab.pendingUrl || "";
 
   const actions = [
     {
@@ -283,7 +284,15 @@ export function filterTabActions(query, currentTab) {
       nextFavorite: !currentTab.bookmarkId,
       bookmarkId: currentTab.bookmarkId || null,
       icon: "favorite"
-    }
+    },
+    ...(currentUrl ? [{
+      id: "copy-url",
+      title: "Copy URL",
+      description: currentUrl,
+      keywords: "copy current page link address url clipboard share",
+      url: currentUrl,
+      icon: "copy"
+    }] : [])
   ];
 
   return actions

@@ -460,3 +460,9 @@ test("finds profile destinations", () => {
   assert.equal(getSettingForTab({ url: "chrome://profile-picker/new-profile" }).id, "add-profile");
 });
 
+test("offers copying the current tab URL", () => {
+  const [action] = filterTabActions("copy url", { id: 1, url: "https://example.com/a" });
+  assert.equal(action.id, "copy-url");
+  assert.equal(action.url, "https://example.com/a");
+  assert.equal(filterTabActions("copy url", { id: 1 }).some((candidate) => candidate.id === "copy-url"), false);
+});

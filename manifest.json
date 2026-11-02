@@ -70,6 +70,9 @@
     "previous-tab-block": {
       "description": "Focus the previous tab block"
     },
+    "edit-current-url": {
+      "description": "Open the command bar to edit the current tab URL"
+    },
     "promote-preview-tab": {
       "suggested_key": {
         "default": "Ctrl+O",
