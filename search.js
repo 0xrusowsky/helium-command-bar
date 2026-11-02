@@ -270,6 +270,19 @@ export function filterTabActions(query, currentTab) {
     .map(({ action }) => action);
 }
 
+// Pages that host the overlay must never load a tab's own favicon URL: a
+// public page requesting http://localhost/favicon.ico or a LAN address
+// triggers Chromium's Local Network Access prompt. The extension favicon
+// endpoint serves the browser's cached icon without any page-initiated fetch.
+export function cachedFaviconUrl(faviconEndpoint, pageUrl, favIconUrl = "") {
+  if (favIconUrl.startsWith("data:")) return favIconUrl;
+  if (!/^(https?|file):/i.test(pageUrl || "")) return "";
+  const url = new URL(faviconEndpoint);
+  url.searchParams.set("pageUrl", pageUrl);
+  url.searchParams.set("size", "32");
+  return url.href;
+}
+
 export function getSettingForTab(tab) {
   const url = normalize(tab?.url || tab?.pendingUrl || "").replace(/[?#].*$/, "").replace(/\/$/, "");
   if (/^chrome-extension:\/\/[^/]+\/options\.html$/.test(url)) {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  cachedFaviconUrl,
   DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
@@ -441,3 +442,14 @@ test("treats ordinary text and unsafe protocols as searches", () => {
   });
   assert.equal(resolveInput("javascript:alert(1)").kind, "search");
 });
+
+test("routes tab favicons through the extension cache to avoid local network requests", () => {
+  const endpoint = "chrome-extension://abc/_favicon/";
+  const local = new URL(cachedFaviconUrl(endpoint, "http://localhost:3000/app", "http://localhost:3000/favicon.ico"));
+  assert.equal(`${local.protocol}//${local.host}`, "chrome-extension://abc");
+  assert.equal(local.searchParams.get("pageUrl"), "http://localhost:3000/app");
+  assert.equal(cachedFaviconUrl(endpoint, "https://example.com", "data:image/png;base64,AA"), "data:image/png;base64,AA");
+  assert.equal(cachedFaviconUrl(endpoint, "chrome://settings", "chrome://theme/icon"), "");
+  assert.equal(cachedFaviconUrl(endpoint, undefined), "");
+});
+

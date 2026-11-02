@@ -6,6 +6,7 @@ import {
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
+  cachedFaviconUrl,
   displayTabTitle,
   duplicateTabIds,
   filterBookmarks,
@@ -232,11 +233,8 @@ function getCommandBarCss() {
   return commandBarCssPromise;
 }
 
-function faviconUrlForPage(pageUrl) {
-  const url = new URL(chrome.runtime.getURL("/_favicon/"));
-  url.searchParams.set("pageUrl", pageUrl);
-  url.searchParams.set("size", "32");
-  return url.href;
+function faviconUrlForPage(pageUrl, favIconUrl) {
+  return cachedFaviconUrl(chrome.runtime.getURL("/_favicon/"), pageUrl, favIconUrl);
 }
 
 function bookmarkForOverlay(bookmark) {
@@ -253,7 +251,7 @@ function tabForOverlay(tab) {
     title: displayTabTitle(tab),
     url: tab.url || "",
     pendingUrl: tab.pendingUrl || "",
-    favIconUrl: tab.favIconUrl || "",
+    favIconUrl: faviconUrlForPage(tab.url || tab.pendingUrl, tab.favIconUrl),
     active: Boolean(tab.active),
     pinned: Boolean(tab.pinned),
     bookmarkId: tab.bookmarkId || null,
@@ -383,7 +381,7 @@ async function queryRows(query, requesterTab) {
         history: {
           ...closed,
           sessionId: closed.sessionId,
-          favIconUrl: closed.favIconUrl || faviconUrlForPage(closed.url)
+          favIconUrl: faviconUrlForPage(closed.url, closed.favIconUrl)
         }
       })),
       ...matchedHistory.map((history) => ({
@@ -454,7 +452,10 @@ async function querySplitPickerRows(query, pickerTabId) {
     rows: [
       ...(target ? [{ kind: "launch", target }] : []),
       ...matchedTabs.map((tab) => ({ kind: "tab", tab: tabForOverlay(tab) })),
-      ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
+      ...matchedClosed.map((closed) => ({
+        kind: "closed",
+        closed: { ...closed, favIconUrl: faviconUrlForPage(closed.url, closed.favIconUrl) }
+      }))
     ],
     label: `${matchedTabs.length} open · ${matchedClosed.length} recently closed`
   };

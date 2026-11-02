@@ -3,6 +3,7 @@ import {
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
+  cachedFaviconUrl,
   displayTabTitle,
   filterBookmarks,
   filterHistory,
@@ -71,6 +72,14 @@ function launchRow(input) {
   const target = resolveInput(input);
   if (!target) return null;
   return { kind: "launch", target };
+}
+
+function safeFaviconUrl(item) {
+  return cachedFaviconUrl(
+    chrome.runtime.getURL("/_favicon/"),
+    item.url || item.pendingUrl,
+    item.favIconUrl || ""
+  );
 }
 
 function bookmarkWithFavicon(bookmark) {
@@ -179,7 +188,7 @@ function updateRows({ resetSelection = false } = {}) {
         history: {
           ...closed,
           sessionId: closed.sessionId,
-          favIconUrl: closed.favIconUrl || bookmarkWithFavicon(closed).favIconUrl
+          favIconUrl: safeFaviconUrl(closed)
         }
       })),
       ...matchedHistory.map((history) => ({
@@ -250,10 +259,11 @@ function makeTabRow(row, index) {
   fallback.textContent = (displayTitle || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(tab);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
     favicon.className = "favicon";
-    favicon.src = tab.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
@@ -358,9 +368,10 @@ function makeCompactFavicon(tab) {
   fallback.textContent = (displayTabTitle(tab) || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(tab);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
-    favicon.src = tab.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
@@ -500,10 +511,11 @@ function makeClosedRow(row, index) {
   fallback.textContent = (closed.title || hostnameFor(closed) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (closed.favIconUrl && !closed.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(closed);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
     favicon.className = "favicon";
-    favicon.src = closed.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
