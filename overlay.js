@@ -1,4 +1,8 @@
 (async () => {
+  // background.js sets the mode in this isolated world before injecting.
+  const openMode = globalThis.heliumCommandBarMode || "search";
+  delete globalThis.heliumCommandBarMode;
+
   const rootId = `helium-command-bar-${chrome.runtime.id}`;
   const existing = document.getElementById(rootId);
   if (existing) {
@@ -111,6 +115,28 @@
   escapeHint.id = "escape-hint";
   searchBox.append(queryInput, escapeHint);
 
+  const isMac = navigator.userAgentData?.platform === "macOS" || /Mac/.test(navigator.platform);
+  const currentTab = initial.currentTab;
+  const currentUrl = currentTab?.url || currentTab?.pendingUrl || "";
+  let editingCurrentUrl = false;
+  let selectInputOnFocus = false;
+
+  const currentTabElement = element("div", "current-tab");
+  currentTabElement.hidden = !currentUrl;
+  if (currentUrl) {
+    currentTabElement.title = "Edit the current tab URL";
+    const details = element("span", "current-tab-details");
+    details.append(
+      element("span", "current-tab-title", currentTab.title || "Untitled tab"),
+      element("span", "current-tab-url", currentUrl)
+    );
+    const editHint = element("kbd", "", "⇥");
+    editHint.title = "Edit the current URL";
+    const copyHint = element("kbd", "", isMac ? "⇧⌘C" : "Ctrl⇧C");
+    copyHint.title = "Copy the current URL";
+    currentTabElement.append(makeCompactFavicon(currentTab), details, editHint, copyHint);
+  }
+
   const resultLabel = element("div", "visually-hidden", initial.label);
   resultLabel.id = "result-label";
   resultLabel.setAttribute("role", "status");
@@ -123,16 +149,29 @@
   resultsElement.setAttribute("role", "listbox");
   resultsElement.setAttribute("aria-label", "Command results");
 
+  const modifierKey = isMac ? "⌘" : "Ctrl";
+  function footerHint(keys, label, className = "") {
+    const hint = element("span", className);
+    hint.append(...keys.map((key) => element("kbd", "", key)), document.createTextNode(` ${label}`));
+    return hint;
+  }
   const footer = element("footer");
-  const selectHelp = element("span");
-  selectHelp.append(element("kbd", "", "↑"), element("kbd", "", "↓"), document.createTextNode(" select"));
-  const openHelp = element("span");
-  openHelp.append(element("kbd", "", "↵"), document.createTextNode(" open"));
-  const closeHelp = element("span");
-  closeHelp.append(element("kbd", "", "⌘⌫"), document.createTextNode(" close tab"));
-  footer.append(selectHelp, openHelp, closeHelp);
+  const windowHelp = footerHint(["⇧↵"], "new window");
+  const incognitoHelp = footerHint([`${modifierKey}⇧↵`], "incognito");
+  const expandHelp = footerHint(["→"], "expand");
+  const backHelp = footerHint(["←"], "back");
+  const closeHelp = footerHint([`${modifierKey}⌫`], "close tab", "footer-end");
+  footer.append(
+    footerHint(["↑", "↓"], "select"),
+    footerHint(["↵"], "open"),
+    windowHelp,
+    incognitoHelp,
+    expandHelp,
+    backHelp,
+    closeHelp
+  );
 
-  commandBar.append(searchBox, resultLabel, emptyElement, resultsElement, footer);
+  commandBar.append(searchBox, currentTabElement, resultLabel, emptyElement, resultsElement, footer);
   backdrop.append(commandBar);
   shadow.append(style, backdrop);
 
@@ -162,6 +201,7 @@
     // and asynchronous overlay setup have finished.
     window.focus();
     queryInput.focus({ preventScroll: true });
+    if (selectInputOnFocus) queryInput.select();
   }
 
   function closeCommandBar() {
@@ -204,8 +244,22 @@
     }
   }
 
+  // Show only the shortcuts that apply to the current input and selection.
+  function updateFooterHints() {
+    const item = navigationItems[selectedIndex];
+    const hasLaunchTarget = rows.some((row) => row.kind === "launch");
+    windowHelp.hidden = !hasLaunchTarget;
+    incognitoHelp.hidden = !hasLaunchTarget;
+    expandHelp.hidden = !(item?.kind === "split-group" || (item?.kind === "row" && item.row.expandable));
+    backHelp.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.parentSettingId));
+    closeHelp.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.kind === "tab"));
+  }
+
   function setSelected(index, { scroll = true } = {}) {
-    if (!navigationItems.length) return;
+    if (!navigationItems.length) {
+      updateFooterHints();
+      return;
+    }
     selectedIndex = (index + navigationItems.length) % navigationItems.length;
 
     navigationItems.forEach((item, itemIndex) => {
@@ -217,6 +271,7 @@
     const selectedElement = navigationItems[selectedIndex]?.element;
     queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
     if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+    updateFooterHints();
   }
 
   function isArrowKey(event, direction, keyCode) {
@@ -463,12 +518,14 @@
     rowElement.setAttribute("role", "option");
 
     const iconBox = element("span", `tab-action-icon-box ${action.icon}`);
-    iconBox.append(svgIcon(
-      action.icon === "favorite"
-        ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
-        : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
-      action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
-    ));
+    iconBox.append(action.iconPath
+      ? svgIcon(action.iconPath, "setting-icon")
+      : svgIcon(
+          action.icon === "favorite"
+            ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
+            : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+          action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
+        ));
 
     const details = element("span", "result-details");
     details.append(
@@ -489,6 +546,9 @@
     if (setting.icon === "bookmarks") {
       return "M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4Z";
     }
+    if (setting.icon === "profile") {
+      return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0";
+    }
     return "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Zm-.22 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z";
   }
 
@@ -507,7 +567,7 @@
       element(
         "span",
         "result-subtitle",
-        row.tab ? `${setting.description} · Open tab` : `${setting.description} · Helium`
+        row.subtitle ?? (row.tab ? `${setting.description} · Open tab` : `${setting.description} · Helium`)
       )
     );
     rowElement.append(
@@ -541,13 +601,17 @@
       element(
         "span",
         "result-subtitle",
-        isUrl ? "New tab" : "Default search engine · New tab"
+        `${isUrl ? "" : "Default search engine · "}${editingCurrentUrl ? "Current tab" : "New tab"}`
       )
     );
 
-    const isMac = navigator.userAgentData?.platform === "macOS" || /Mac/.test(navigator.platform);
-    const enterHint = element("kbd", "enter-hint", isMac ? "⌘↵" : "Ctrl↵");
-    enterHint.title = "Always open or search the input in a new tab";
+    const enterHint = editingCurrentUrl
+      ? element("kbd", "enter-hint", "↵")
+      : element("kbd", "enter-hint", isMac ? "⌘↵" : "Ctrl↵");
+    const modifier = isMac ? "⌘" : "Ctrl";
+    enterHint.title = `${editingCurrentUrl
+      ? `Open or search in the current tab · ${modifier}↵ for a new tab`
+      : "Always open or search the input in a new tab"} · ⇧↵ new window · ${modifier}⇧↵ incognito window`;
     rowElement.append(iconBox, details, enterHint);
     return rowElement;
   }
@@ -560,7 +624,9 @@
     rowElement.dataset.navigationIndex = String(index);
     rowElement.addEventListener("mousedown", (event) => event.preventDefault());
     rowElement.addEventListener("click", () => activateNavigationItem(index));
-    rowElement.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+    rowElement.addEventListener("mousemove", () => {
+      if (pointerMoved && selectedIndex !== index) setSelected(index, { scroll: false });
+    });
     return rowElement;
   }
 
@@ -587,13 +653,13 @@
     while (rowIndex < rows.length) {
       const row = rows[rowIndex];
       if (
-        (row.kind === "extension-setting" || row.kind === "extension-update") &&
+        row.parentSettingId &&
         !expandedSettingIds.has(row.parentSettingId)
       ) {
         rowIndex += 1;
         continue;
       }
-      if (row.kind === "setting" && row.expandable && expandedSettingIds.has(row.setting.id)) {
+      if (row.expandable && expandedSettingIds.has(row.setting.id)) {
         const childRows = [];
         rowIndex += 1;
         while (rowIndex < rows.length && rows[rowIndex].parentSettingId === row.setting.id) {
@@ -654,10 +720,10 @@
       else if (row.kind === "bookmark") rowElement = makeBookmarkRow(row, navigationItems.length);
       else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
       else if (row.kind === "history") rowElement = makeHistoryRow(row, navigationItems.length);
-      else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update") rowElement = makeSettingRow(row, navigationItems.length);
+      else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "extension" || row.kind === "extension-action") rowElement = makeSettingRow(row, navigationItems.length);
       else if (row.kind === "tab-action") rowElement = makeTabActionRow(row, navigationItems.length);
       else rowElement = makeLaunchRow(row, navigationItems.length);
-      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "tab-action"
+      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "tab-action" || row.kind === "extension" || row.kind === "extension-action"
         ? sections.search
         : row.kind === "bookmark"
           ? sections.favorites
@@ -753,10 +819,28 @@
         settingId: item.row.setting.id,
         tabId: item.row.tab?.id
       });
+    } else if (item.row.kind === "extension") {
+      // Chromium does not let extensions open another extension's toolbar
+      // popup, so Enter reveals the actions that are possible instead.
+      expandRow(item.row);
+    } else if (item.row.kind === "extension-action") {
+      await sendAction({
+        type: "helium-command-bar:extension-action",
+        extensionId: item.row.extensionId,
+        action: item.row.extensionAction
+      });
     } else if (item.row.kind === "update" || item.row.kind === "extension-update") {
       reloadExtension();
     } else if (item.row.kind === "tab-action") {
       const action = item.row.action;
+      if (action.id === "copy-url") {
+        await copyUrl(action.url);
+        return;
+      }
+      if (action.id === "screenshot") {
+        await copyScreenshot();
+        return;
+      }
       await sendAction(action.id === "toggle-favorite"
         ? {
             type: "helium-command-bar:set-favorite",
@@ -764,14 +848,31 @@
             favorite: action.nextFavorite,
             bookmarkId: action.bookmarkId
           }
-        : {
-            type: "helium-command-bar:set-pinned",
-            tabId: item.row.tabId,
-            pinned: action.nextPinned
-          });
+        : action.id === "toggle-pin"
+          ? {
+              type: "helium-command-bar:set-pinned",
+              tabId: item.row.tabId,
+              pinned: action.nextPinned
+            }
+          : {
+              type: "helium-command-bar:tab-action",
+              tabId: item.row.tabId,
+              actionId: action.id
+            });
     } else {
-      await openInput();
+      await openInput(editingCurrentUrl ? "current" : "tab");
     }
+  }
+
+  function expandRow(row) {
+    expandedSettingIds.add(row.setting.id);
+    renderRows();
+    const childIndex = navigationItems.findIndex((candidate) =>
+      candidate.kind === "row" &&
+      candidate.row.parentSettingId === row.setting.id
+    );
+    if (childIndex !== -1) setSelected(childIndex);
+    queryInput.focus({ preventScroll: true });
   }
 
   function enterSplitNavigation(item) {
@@ -792,11 +893,63 @@
     if (groupIndex !== -1) setSelected(groupIndex);
   }
 
-  async function openInput() {
+  // disposition: "current", "tab", "window", or "incognito".
+  async function openInput(disposition) {
     await sendAction({
       type: "helium-command-bar:open-input",
-      input: queryInput.value
+      input: queryInput.value,
+      disposition
     });
+  }
+
+  function editCurrentUrl() {
+    if (!currentUrl) return;
+    editingCurrentUrl = true;
+    currentTabElement.classList.add("editing");
+    queryInput.value = currentUrl;
+    selectInputOnFocus = true;
+    splitNavigationKeys.clear();
+    expandedSettingIds.clear();
+    void refreshRows({ resetSelection: true });
+    focusCommandBar();
+  }
+
+  async function copyScreenshot() {
+    // Capture the page without the overlay: remove it and wait for a repaint.
+    closeCommandBar();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "helium-command-bar:capture-visible-tab" });
+      if (!response?.dataUrl) return;
+      const bytes = Uint8Array.from(atob(response.dataUrl.split(",")[1]), (character) => character.charCodeAt(0));
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })
+      ]);
+    } catch (error) {
+      // Insecure pages have no async clipboard API. Show the capture in an
+      // extension page, which can copy or save it.
+      console.info("Opening the screenshot instead of copying it", error);
+      if (response?.dataUrl) {
+        void chrome.runtime.sendMessage({ type: "helium-command-bar:show-screenshot" }).catch(() => {});
+      }
+    }
+  }
+
+  async function copyUrl(url = currentUrl) {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Insecure pages do not expose the async clipboard API.
+      const buffer = element("textarea");
+      buffer.value = url;
+      shadow.append(buffer);
+      buffer.select();
+      document.execCommand("copy");
+      buffer.remove();
+    }
+    closeCommandBar();
   }
 
   async function closeTab(tabId) {
@@ -810,10 +963,25 @@
     }
   }
 
+  // The overlay often appears under a stationary cursor, and Chromium then
+  // dispatches hover events (and synthetic mousemoves after re-renders or
+  // scrolling) without any real pointer movement. Only let the pointer change
+  // the selection when its screen position actually changed.
+  let pointerMoved = false;
+  let lastPointerPosition = null;
+  backdrop.addEventListener("mousemove", (event) => {
+    pointerMoved = lastPointerPosition !== null &&
+      (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+    lastPointerPosition = { x: event.screenX, y: event.screenY };
+  }, { capture: true });
+
   backdrop.addEventListener("mousedown", (event) => {
     if (event.target === backdrop) closeCommandBar();
   });
+  currentTabElement.addEventListener("mousedown", (event) => event.preventDefault());
+  currentTabElement.addEventListener("click", editCurrentUrl);
   queryInput.addEventListener("input", () => {
+    selectInputOnFocus = false;
     splitNavigationKeys.clear();
     expandedSettingIds.clear();
     refreshRows({ resetSelection: true });
@@ -834,21 +1002,14 @@
         enterSplitNavigation(item);
       } else if (item?.kind === "row" && item.row.expandable) {
         event.preventDefault();
-        expandedSettingIds.add(item.row.setting.id);
-        renderRows();
-        const childIndex = navigationItems.findIndex((candidate) =>
-          candidate.kind === "row" &&
-          candidate.row.parentSettingId === item.row.setting.id
-        );
-        if (childIndex !== -1) setSelected(childIndex);
-        queryInput.focus({ preventScroll: true });
+        expandRow(item.row);
       }
     } else if (isArrowKey(event, "Left", 37)) {
       const item = navigationItems[selectedIndex];
       if (item?.kind === "split-member") {
         event.preventDefault();
         exitSplitNavigation(item);
-      } else if (item?.kind === "row" && (item.row.kind === "extension-setting" || item.row.kind === "extension-update")) {
+      } else if (item?.kind === "row" && item.row.parentSettingId) {
         event.preventDefault();
         expandedSettingIds.delete(item.row.parentSettingId);
         renderRows();
@@ -859,9 +1020,20 @@
         if (parentIndex !== -1) setSelected(parentIndex);
         queryInput.focus({ preventScroll: true });
       }
+    } else if (isKey(event, "Tab", 9) && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault();
+      editCurrentUrl();
+    } else if (
+      (event.key === "c" || event.key === "C") && event.shiftKey &&
+      (isMac ? event.metaKey : event.ctrlKey) && !event.altKey
+    ) {
+      event.preventDefault();
+      await copyUrl();
     } else if (isKey(event, "Enter", 13)) {
       event.preventDefault();
-      if (event.metaKey || event.ctrlKey) await openInput();
+      const modified = event.metaKey || event.ctrlKey;
+      if (event.shiftKey) await openInput(modified ? "incognito" : "window");
+      else if (modified) await openInput("tab");
       else await activateNavigationItem();
     } else if (isKey(event, "Backspace", 8) && (event.metaKey || event.ctrlKey)) {
       const item = navigationItems[selectedIndex];
@@ -881,6 +1053,16 @@
   });
 
   rows = initial.rows;
+  if (openMode === "edit-url" && currentUrl) {
+    // Like the native location bar: show the URL selected so typing replaces
+    // it, and navigate the current tab on Enter.
+    editingCurrentUrl = true;
+    currentTabElement.classList.add("editing");
+    if (!queryInput.value) {
+      queryInput.value = currentUrl;
+      selectInputOnFocus = true;
+    }
+  }
   renderRows();
   if (queryInput.value) void refreshRows({ resetSelection: true });
   focusCommandBar();

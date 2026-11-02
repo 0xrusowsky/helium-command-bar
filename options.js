@@ -14,6 +14,9 @@ const VALID_MODES = new Set(["compact", "expanded"]);
 const status = document.querySelector("#save-status");
 const blurStatus = document.querySelector("#blur-status");
 const blurToggle = document.querySelector("#blur-inactive-split");
+const extensionSearchToggle = document.querySelector("#extension-search");
+const extensionSearchStatus = document.querySelector("#extension-search-status");
+let extensionSearchStatusTimer;
 const resultsStatus = document.querySelector("#results-status");
 const duplicatesStatus = document.querySelector("#duplicates-status");
 const duplicateTabsToggle = document.querySelector("#close-duplicate-tabs");
@@ -40,6 +43,7 @@ const refreshCommandsButton = document.querySelector("#refresh-commands");
 const importCoreKarabinerLink = document.querySelector("#import-core-karabiner");
 const openExtensionShortcutsButton = document.querySelector("#open-extension-shortcuts");
 const BLUR_PERMISSION = { origins: ["<all_urls>"] };
+const MANAGEMENT_PERMISSION = { permissions: ["management"] };
 const KARABINER_BASE_URL = "https://raw.githubusercontent.com/0xrusowsky/helium-command-bar/main/integrations";
 const CORE_KARABINER_RULE_URL = `${KARABINER_BASE_URL}/karabiner-core.json`;
 const CORE_COMMANDS = Object.freeze({
@@ -83,6 +87,14 @@ function showBlurStatus(text, error = false) {
   blurStatus.classList.toggle("error", error);
   blurStatus.classList.add("visible");
   blurStatusTimer = setTimeout(() => blurStatus.classList.remove("visible"), 2600);
+}
+
+function showExtensionSearchStatus(text, error = false) {
+  clearTimeout(extensionSearchStatusTimer);
+  extensionSearchStatus.textContent = text;
+  extensionSearchStatus.classList.toggle("error", error);
+  extensionSearchStatus.classList.add("visible");
+  extensionSearchStatusTimer = setTimeout(() => extensionSearchStatus.classList.remove("visible"), 2600);
 }
 
 function showThemeStatus() {
@@ -357,6 +369,9 @@ favoriteFolderIds = Array.isArray(stored.favoriteFolderIds)
 allFoldersToggle.checked = favoriteFolderIds === null;
 await Promise.all([
   refreshBlurToggle(stored.blurInactiveSplitPane),
+  chrome.permissions.contains(MANAGEMENT_PERMISSION).then((granted) => {
+    extensionSearchToggle.checked = granted;
+  }),
   loadBookmarkFolders(),
   refreshCommandAssignments()
 ]);
@@ -474,6 +489,26 @@ blurToggle.addEventListener("change", async () => {
   }
 });
 
+// The permission itself is the setting, so there is no stored flag to drift.
+extensionSearchToggle.addEventListener("change", async () => {
+  extensionSearchToggle.disabled = true;
+  try {
+    if (extensionSearchToggle.checked) {
+      const granted = await chrome.permissions.request(MANAGEMENT_PERMISSION);
+      extensionSearchToggle.checked = granted;
+      showExtensionSearchStatus(granted ? "Enabled" : "Permission not granted", !granted);
+    } else {
+      await chrome.permissions.remove(MANAGEMENT_PERMISSION);
+      showExtensionSearchStatus("Disabled");
+    }
+  } catch (error) {
+    extensionSearchToggle.checked = await chrome.permissions.contains(MANAGEMENT_PERMISSION);
+    showExtensionSearchStatus(error.message || "Could not change permission", true);
+  } finally {
+    extensionSearchToggle.disabled = false;
+  }
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "sync") return;
   if (changes.commandBarColor) setThemeColor(changes.commandBarColor.newValue);
@@ -513,6 +548,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 chrome.permissions.onRemoved.addListener((permissions) => {
+  if (permissions.permissions?.includes("management")) extensionSearchToggle.checked = false;
   if (permissions.origins?.some((origin) => origin === "<all_urls>" || origin === "*://*/*")) {
     blurToggle.checked = false;
   }

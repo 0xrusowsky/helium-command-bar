@@ -67,7 +67,7 @@ Certify all applicable Limited Use statements: no sale, no use unrelated to the 
 
 ### activeTab
 
-Used only after the user invokes the extension, allowing the command-bar overlay to be inserted into the active page.
+Used only after the user invokes the extension, allowing the command-bar overlay to be inserted into the active page and, when the user chooses Copy screenshot, capturing that page's visible area locally for the clipboard.
 
 ### bookmarks
 
@@ -76,6 +76,10 @@ Reads bookmarks for the Bookmarks results section and creates or removes a bookm
 ### favicon
 
 Loads browser-cached favicons for bookmark and tab results. Favicons are not sent to the developer.
+
+### Optional permission: management
+
+Requested only when the user turns on Search installed extensions in the settings page, and removed when it is turned off. Lists installed extensions by name when the user searches for them, opens an extension's options or details page, and enables or disables an extension only when the user chooses that action. Extension information is not sent to the developer.
 
 ### scripting
 

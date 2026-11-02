@@ -6,9 +6,12 @@ import {
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
+  cachedFaviconUrl,
   displayTabTitle,
   duplicateTabIds,
+  extensionRows,
   filterBookmarks,
+  filterExtensions,
   filterHistory,
   filterRecentlyClosed,
   filterSettings,
@@ -19,6 +22,7 @@ import {
   getSettingById,
   getSettingForTab,
   isSplitTab,
+  nextZoomLevel,
   normalizeResultSectionOrder,
   resolveInput,
   sessionToItem
@@ -27,16 +31,19 @@ import {
   DEFAULT_COMMAND_BAR_COLOR,
   commandBarThemeCss
 } from "./theme.js";
-import { unfocusedNewTabIds } from "./navigation.js";
+import { Direction, getSplitPaneCycleTarget, unfocusedNewTabIds } from "./navigation.js";
 import { checkForExtensionUpdate, getExtensionUpdateState } from "./update.js";
 
 const NATIVE_SPLIT_PICKER_URL = "chrome://tab-search.top-chrome/split_new_tab_page.html";
 const VISUAL_PERMISSION = { origins: ["<all_urls>"] };
+const MANAGEMENT_PERMISSION = { permissions: ["management"] };
 const interceptingSplitTabs = new Set();
 const blurredPartnersByOwner = new Map();
 const inactiveEffectByTab = new Map();
 let lastFocusedWindowId;
 let previousFocusedWindowId;
+
+let lastScreenshotDataUrl = null;
 
 let commandBarCssPromise;
 let bookmarkCachePromise;
@@ -66,6 +73,13 @@ function getBookmarks() {
     bookmarkCachePromise = chrome.bookmarks.getTree().then(flattenBookmarks);
   }
   return bookmarkCachePromise;
+}
+
+// Extension search is opt-in: management is an optional permission granted
+// from the settings page.
+async function getInstalledExtensions() {
+  if (!await chrome.permissions.contains(MANAGEMENT_PERMISSION)) return [];
+  return chrome.management.getAll();
 }
 
 function invalidateBookmarks() {
@@ -232,11 +246,8 @@ function getCommandBarCss() {
   return commandBarCssPromise;
 }
 
-function faviconUrlForPage(pageUrl) {
-  const url = new URL(chrome.runtime.getURL("/_favicon/"));
-  url.searchParams.set("pageUrl", pageUrl);
-  url.searchParams.set("size", "32");
-  return url.href;
+function faviconUrlForPage(pageUrl, favIconUrl) {
+  return cachedFaviconUrl(chrome.runtime.getURL("/_favicon/"), pageUrl, favIconUrl);
 }
 
 function bookmarkForOverlay(bookmark) {
@@ -253,7 +264,7 @@ function tabForOverlay(tab) {
     title: displayTabTitle(tab),
     url: tab.url || "",
     pendingUrl: tab.pendingUrl || "",
-    favIconUrl: tab.favIconUrl || "",
+    favIconUrl: faviconUrlForPage(tab.url || tab.pendingUrl, tab.favIconUrl),
     active: Boolean(tab.active),
     pinned: Boolean(tab.pinned),
     bookmarkId: tab.bookmarkId || null,
@@ -265,7 +276,7 @@ function tabForOverlay(tab) {
 
 async function queryRows(query, requesterTab) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions, bookmarks, historyItems, css, settings, updateState] = await Promise.all([
+  const [tabs, sessions, bookmarks, historyItems, css, settings, updateState, extensions] = await Promise.all([
     chrome.tabs.query({}),
     chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
     getBookmarks(),
@@ -282,7 +293,8 @@ async function queryRows(query, requesterTab) {
       favoriteFolderIds: null,
       resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
     }),
-    getExtensionUpdateState()
+    getExtensionUpdateState(),
+    input.trim() ? getInstalledExtensions() : Promise.resolve([])
   ]);
   const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
   const enabledBookmarks = settings.showFavorites === false ? [] : configuredBookmarks;
@@ -368,7 +380,8 @@ async function queryRows(query, requesterTab) {
       kind: "tab-action",
       action,
       tabId: requesterTab.id
-    }))
+    })),
+    ...filterExtensions(extensions, input, chrome.runtime.id).flatMap(extensionRows)
   ];
   const sectionOrder = normalizeResultSectionOrder(settings.resultSectionOrder);
   const sectionRows = {
@@ -383,7 +396,7 @@ async function queryRows(query, requesterTab) {
         history: {
           ...closed,
           sessionId: closed.sessionId,
-          favIconUrl: closed.favIconUrl || faviconUrlForPage(closed.url)
+          favIconUrl: faviconUrlForPage(closed.url, closed.favIconUrl)
         }
       })),
       ...matchedHistory.map((history) => ({
@@ -420,7 +433,8 @@ async function queryRows(query, requesterTab) {
     label,
     sectionOrder,
     defaultSplitExpanded: settings.defaultSplitMode === "expanded",
-    blurredPartnerIds
+    blurredPartnerIds,
+    currentTab: tabForOverlay(requesterTab)
   };
 }
 
@@ -454,10 +468,118 @@ async function querySplitPickerRows(query, pickerTabId) {
     rows: [
       ...(target ? [{ kind: "launch", target }] : []),
       ...matchedTabs.map((tab) => ({ kind: "tab", tab: tabForOverlay(tab) })),
-      ...matchedClosed.map((closed) => ({ kind: "closed", closed }))
+      ...matchedClosed.map((closed) => ({
+        kind: "closed",
+        closed: { ...closed, favIconUrl: faviconUrlForPage(closed.url, closed.favIconUrl) }
+      }))
     ],
     label: `${matchedTabs.length} open · ${matchedClosed.length} recently closed`
   };
+}
+
+async function openTargetInNewWindow(target, incognito) {
+  if (target.kind === "url") {
+    await chrome.windows.create({ url: target.url, incognito, focused: true });
+  } else if (!incognito && chrome.search?.query) {
+    await chrome.search.query({ text: target.text, disposition: "NEW_WINDOW" });
+  } else {
+    // The default search engine's URL is not exposed to extensions. Searching
+    // in an incognito tab only works when the extension is allowed there;
+    // otherwise the new incognito window stays on its new-tab page.
+    const createdWindow = await chrome.windows.create({ incognito, focused: true });
+    const tabId = createdWindow.tabs?.[0]?.id;
+    try {
+      if (tabId !== undefined) await chrome.search.query({ text: target.text, tabId });
+    } catch (error) {
+      console.info("Could not search in the incognito window", error);
+    }
+  }
+}
+
+async function runTabAction(actionId, tab) {
+  switch (actionId) {
+    case "reload":
+      await chrome.tabs.reload(tab.id);
+      break;
+    case "hard-reload":
+      await chrome.tabs.reload(tab.id, { bypassCache: true });
+      break;
+    case "duplicate":
+      await chrome.tabs.duplicate(tab.id);
+      break;
+    case "toggle-mute":
+      await chrome.tabs.update(tab.id, { muted: !tab.mutedInfo?.muted });
+      break;
+    case "go-back":
+      await chrome.tabs.goBack(tab.id);
+      break;
+    case "go-forward":
+      await chrome.tabs.goForward(tab.id);
+      break;
+    case "close-tab":
+      await chrome.tabs.remove(tab.id);
+      break;
+    case "close-other-tabs":
+    case "close-tabs-right": {
+      // Pinned tabs and the current tab's split partner are never closed.
+      const inSplit = isSplitTab(tab, chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1);
+      const tabIds = (await chrome.tabs.query({ windowId: tab.windowId }))
+        .filter((candidate) =>
+          candidate.id !== tab.id &&
+          !candidate.pinned &&
+          !(inSplit && candidate.splitViewId === tab.splitViewId) &&
+          (actionId === "close-other-tabs" || candidate.index > tab.index)
+        )
+        .map((candidate) => candidate.id);
+      if (tabIds.length) await chrome.tabs.remove(tabIds);
+      break;
+    }
+    case "focus-other-pane":
+    case "close-other-pane":
+    case "close-split": {
+      const splitViewIdNone = chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1;
+      if (!isSplitTab(tab, splitViewIdNone)) return { ok: false };
+      const windowTabs = await chrome.tabs.query({ windowId: tab.windowId });
+      if (actionId === "focus-other-pane") {
+        const target = getSplitPaneCycleTarget(windowTabs, tab.id, Direction.NEXT, splitViewIdNone);
+        if (!target) return { ok: false };
+        await chrome.tabs.update(target.id, { active: true });
+        break;
+      }
+      const tabIds = getSplitPartners(windowTabs, tab).map((partner) => partner.id);
+      if (actionId === "close-split") tabIds.push(tab.id);
+      if (tabIds.length) await chrome.tabs.remove(tabIds);
+      break;
+    }
+    case "new-window":
+      await chrome.windows.create({ focused: true });
+      break;
+    case "new-incognito-window":
+      await chrome.windows.create({ incognito: true, focused: true });
+      break;
+    case "open-in-incognito": {
+      const target = resolveInput(tab.url || tab.pendingUrl || "");
+      if (target?.kind !== "url") return { ok: false };
+      await openTargetInNewWindow(target, true);
+      break;
+    }
+    case "move-to-new-window":
+      await chrome.windows.create({ tabId: tab.id, focused: true });
+      break;
+    case "zoom-in":
+    case "zoom-out":
+      await chrome.tabs.setZoom(
+        tab.id,
+        nextZoomLevel(await chrome.tabs.getZoom(tab.id), actionId === "zoom-in" ? 1 : -1)
+      );
+      break;
+    case "zoom-reset":
+      await chrome.tabs.setZoom(tab.id, 0);
+      break;
+    default:
+      return { ok: false };
+  }
+  return { ok: true };
 }
 
 async function handleOverlayMessage(message, sender) {
@@ -519,6 +641,15 @@ async function handleOverlayMessage(message, sender) {
     }
     invalidateBookmarks();
     return { ok: true };
+  }
+
+  if (message?.type === "helium-command-bar:tab-action") {
+    const tabId = Number(message.tabId);
+    if (!Number.isInteger(tabId)) throw new Error("Invalid tab");
+    if (sender.tab?.id !== undefined && sender.tab.id !== tabId) {
+      throw new Error("Cannot act on a different tab");
+    }
+    return runTabAction(String(message.actionId), await chrome.tabs.get(tabId));
   }
 
   if (message?.type === "helium-command-bar:activate-tab") {
@@ -616,6 +747,44 @@ async function handleOverlayMessage(message, sender) {
       return { ok: true };
     }
 
+    case "helium-command-bar:capture-visible-tab":
+      // activeTab, granted when the user invoked the command bar, permits
+      // capturing the invoking tab.
+      lastScreenshotDataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: "png" });
+      return { ok: true, dataUrl: lastScreenshotDataUrl };
+
+    case "helium-command-bar:show-screenshot":
+      if (!lastScreenshotDataUrl) return { ok: false };
+      await chrome.tabs.create({
+        url: chrome.runtime.getURL("screenshot.html"),
+        active: true,
+        windowId: sender.tab.windowId
+      });
+      return { ok: true };
+
+    case "helium-command-bar:get-screenshot":
+      return { ok: Boolean(lastScreenshotDataUrl), dataUrl: lastScreenshotDataUrl };
+
+    case "helium-command-bar:extension-action": {
+      if (
+        typeof message.extensionId !== "string" ||
+        !await chrome.permissions.contains(MANAGEMENT_PERMISSION)
+      ) {
+        throw new Error("Invalid extension");
+      }
+      const extension = await chrome.management.get(message.extensionId);
+      const detailsUrl = `chrome://extensions/?id=${encodeURIComponent(extension.id)}`;
+      if (message.action === "toggle") {
+        await chrome.management.setEnabled(extension.id, !extension.enabled);
+      } else {
+        const url = message.action === "details" || !extension.optionsUrl
+          ? detailsUrl
+          : extension.optionsUrl;
+        await chrome.tabs.create({ url, active: true, windowId: sender.tab.windowId });
+      }
+      return { ok: true };
+    }
+
     case "helium-command-bar:open-history": {
       const target = resolveInput(typeof message.url === "string" ? message.url.slice(0, 4096) : "");
       if (target?.kind !== "url") throw new Error("Invalid history URL");
@@ -627,7 +796,19 @@ async function handleOverlayMessage(message, sender) {
       const target = resolveInput(typeof message.input === "string" ? message.input.slice(0, 4096) : "");
       if (!target) return { ok: false };
 
-      if (target.kind === "url") {
+      if (message.disposition === "window" || message.disposition === "incognito") {
+        await openTargetInNewWindow(target, message.disposition === "incognito");
+      } else if (message.disposition === "current") {
+        if (target.kind === "url") {
+          await chrome.tabs.update(sender.tab.id, { url: target.url });
+        } else if (chrome.search?.query) {
+          await chrome.search.query({ text: target.text, tabId: sender.tab.id });
+        } else {
+          await chrome.tabs.update(sender.tab.id, {
+            url: `https://www.google.com/search?q=${encodeURIComponent(target.text)}`
+          });
+        }
+      } else if (target.kind === "url") {
         await chrome.tabs.create({ url: target.url, active: true, windowId: sender.tab.windowId });
       } else if (chrome.search?.query) {
         chrome.search.query({ text: target.text, disposition: "NEW_TAB" });
@@ -831,7 +1012,7 @@ async function promoteCurrentTabToMainWindow() {
   return { ok: true };
 }
 
-async function openCommandBar(tab) {
+async function openCommandBar(tab, { mode = "search" } = {}) {
   if (!tab?.id) return;
 
   // Reassert the active browser window and tab before injecting. This gives
@@ -847,6 +1028,15 @@ async function openCommandBar(tab) {
   }
 
   try {
+    if (mode !== "search") {
+      // Injected files cannot receive arguments. The isolated world persists
+      // between injections, so leave the mode where overlay.js consumes it.
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: (value) => { globalThis.heliumCommandBarMode = value; },
+        args: [mode]
+      });
+    }
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["overlay.js"]
@@ -887,9 +1077,9 @@ chrome.commands.onCommand.addListener(async (command) => {
       await promoteCurrentTabToMainWindow();
       return;
     }
-    if (command !== "open-command-bar") return;
+    if (command !== "open-command-bar" && command !== "edit-current-url") return;
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    await openCommandBar(tab);
+    await openCommandBar(tab, { mode: command === "edit-current-url" ? "edit-url" : "search" });
   } catch (error) {
     console.error(`Could not handle command ${command}`, error);
   }

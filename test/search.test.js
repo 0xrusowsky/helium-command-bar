@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  cachedFaviconUrl,
+  extensionRows,
+  filterExtensions,
   DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
@@ -22,6 +25,7 @@ import {
   isIgnoredRecentlyClosedTab,
   isSplitTab,
   normalize,
+  nextZoomLevel,
   normalizeResultSectionOrder,
   resolveInput,
   scoreTab,
@@ -440,4 +444,85 @@ test("treats ordinary text and unsafe protocols as searches", () => {
     text: "helium browser"
   });
   assert.equal(resolveInput("javascript:alert(1)").kind, "search");
+});
+
+test("routes tab favicons through the extension cache to avoid local network requests", () => {
+  const endpoint = "chrome-extension://abc/_favicon/";
+  const local = new URL(cachedFaviconUrl(endpoint, "http://localhost:3000/app", "http://localhost:3000/favicon.ico"));
+  assert.equal(`${local.protocol}//${local.host}`, "chrome-extension://abc");
+  assert.equal(local.searchParams.get("pageUrl"), "http://localhost:3000/app");
+  assert.equal(cachedFaviconUrl(endpoint, "https://example.com", "data:image/png;base64,AA"), "data:image/png;base64,AA");
+  assert.equal(cachedFaviconUrl(endpoint, "chrome://settings", "chrome://theme/icon"), "");
+  assert.equal(cachedFaviconUrl(endpoint, undefined), "");
+});
+
+test("finds profile destinations", () => {
+  assert.equal(filterSettings("switch profile")[0].id, "switch-profile");
+  assert.equal(filterSettings("add profile")[0].id, "add-profile");
+  assert.equal(filterSettings("rename profile")[0].id, "manage-profile");
+  assert.equal(getSettingForTab({ url: "chrome://profile-picker/new-profile" }).id, "add-profile");
+});
+
+test("offers copying the current tab URL", () => {
+  const [action] = filterTabActions("copy url", { id: 1, url: "https://example.com/a" });
+  assert.equal(action.id, "copy-url");
+  assert.equal(action.url, "https://example.com/a");
+  assert.equal(filterTabActions("copy url", { id: 1 }).some((candidate) => candidate.id === "copy-url"), false);
+});
+
+test("offers current-tab actions with icons and caps the result count", () => {
+  const tab = { id: 1, url: "https://example.com" };
+  assert.deepEqual(filterTabActions("zoom", tab).map((action) => action.id), ["zoom-in", "zoom-out", "zoom-reset"]);
+  assert.equal(filterTabActions("mute", { ...tab, mutedInfo: { muted: true } })[0].title, "Unmute tab");
+  assert.ok(filterTabActions("reload", tab)[0].iconPath);
+  assert.ok(filterTabActions("re", tab).length <= 5);
+});
+
+test("steps through browser zoom levels", () => {
+  assert.equal(nextZoomLevel(1, 1), 1.1);
+  assert.equal(nextZoomLevel(1, -1), 0.9);
+  assert.equal(nextZoomLevel(1.2, -1), 1.1);
+  assert.equal(nextZoomLevel(5, 1), 5);
+  assert.equal(nextZoomLevel(0.25, -1), 0.25);
+});
+
+test("offers split actions only inside a split view", () => {
+  const ids = (tab) => filterTabActions("split", tab).map((action) => action.id);
+  assert.ok(ids({ id: 1, splitViewId: 4 }).includes("focus-other-pane"));
+  assert.equal(filterTabActions("close other pane", { id: 1, splitViewId: 4 })[0].id, "close-other-pane");
+  assert.equal(ids({ id: 1, splitViewId: -1 }).length, 0);
+});
+
+test("offers window and incognito actions", () => {
+  const tab = { id: 1, url: "https://example.com" };
+  assert.equal(filterTabActions("new window", tab)[0].id, "new-window");
+  assert.equal(filterTabActions("incognito", tab)[0].id, "new-incognito-window");
+  assert.ok(filterTabActions("incognito", tab).some((action) => action.id === "open-in-incognito"));
+  assert.equal(
+    filterTabActions("incognito", { id: 1, url: "chrome://settings" }).some((action) => action.id === "open-in-incognito"),
+    false
+  );
+});
+
+test("finds installed extensions by name and builds their actions", () => {
+  const extensions = [
+    { id: "self", name: "Helium Command Bar", type: "extension", enabled: true },
+    { id: "ublock", name: "uBlock Origin", type: "extension", enabled: true, mayDisable: true, optionsUrl: "chrome-extension://ublock/options.html" },
+    { id: "theme", name: "Blue theme", type: "theme", enabled: true }
+  ];
+  assert.deepEqual(filterExtensions(extensions, "ublock", "self").map((extension) => extension.id), ["ublock"]);
+  assert.equal(filterExtensions(extensions, "helium command", "self").length, 0);
+  assert.equal(filterExtensions(extensions, "blue", "self").length, 0);
+  assert.deepEqual(filterExtensions(extensions, "", "self"), []);
+
+  const [parent, ...children] = extensionRows(extensions[1]);
+  assert.equal(parent.expandable, true);
+  assert.deepEqual(children.map((row) => row.extensionAction), ["options", "toggle", "details"]);
+  assert.ok(children.every((row) => row.parentSettingId === parent.setting.id));
+  assert.equal(children[1].setting.title, "Disable");
+});
+
+test("offers a screenshot only for web pages", () => {
+  assert.equal(filterTabActions("screenshot", { id: 1, url: "https://example.com" })[0].id, "screenshot");
+  assert.equal(filterTabActions("screenshot", { id: 1, url: "chrome://settings" }).length, 0);
 });

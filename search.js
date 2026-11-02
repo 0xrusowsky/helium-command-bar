@@ -75,6 +75,35 @@ export const SETTINGS_ENTRIES = Object.freeze([
     keywords: "bookmarks favorites favourites manage edit organize folders library",
     icon: "bookmarks",
     aliases: ["helium://bookmarks", "chrome://bookmarks"]
+  }),
+  // Extensions cannot enumerate or open other profiles directly, so profile
+  // commands route through Chromium's own profile picker and settings pages.
+  Object.freeze({
+    id: "switch-profile",
+    title: "Switch profile",
+    url: "chrome://profile-picker",
+    description: "Choose another Helium profile",
+    keywords: "profiles person people user account switch change open work personal",
+    icon: "profile",
+    aliases: ["chrome://profile-picker", "helium://profile-picker"]
+  }),
+  Object.freeze({
+    id: "add-profile",
+    title: "Add profile",
+    url: "chrome://profile-picker/new-profile",
+    description: "Create a new Helium profile",
+    keywords: "profiles new create person people user account",
+    icon: "profile",
+    aliases: ["chrome://profile-picker/new-profile", "helium://profile-picker/new-profile"]
+  }),
+  Object.freeze({
+    id: "manage-profile",
+    title: "Customize profile",
+    url: "helium://settings/manageProfile",
+    description: "Change this profile's name, avatar, and color",
+    keywords: "profiles edit rename avatar color person people user account",
+    icon: "profile",
+    aliases: ["helium://settings/manageProfile", "chrome://settings/manageProfile"]
   })
 ]);
 
@@ -229,9 +258,34 @@ export function getSettingById(id) {
   return SETTINGS_ENTRIES.find((setting) => setting.id === id) || null;
 }
 
+// Stroke paths in a 24×24 view box, rendered by the overlay and the popup.
+export const ACTION_ICON_PATHS = Object.freeze({
+  copy: "M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Zm-4 6H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
+  reload: "M21 12a9 9 0 1 1-3-6.7L21 8m0-5v5h-5",
+  duplicate: "M8 8h12v12H8V8Zm-4 8V4h12",
+  mute: "M11 5 6 9H3v6h3l5 4V5Zm5 4 5 6m0-6-5 6",
+  unmute: "M11 5 6 9H3v6h3l5 4V5Zm4.5 3.5a5 5 0 0 1 0 7",
+  back: "M19 12H5m6-6-6 6 6 6",
+  forward: "M5 12h14m-6-6 6 6-6 6",
+  close: "M6 6l12 12M18 6 6 18",
+  "close-right": "M4 12h10m-4-4 4 4-4 4M20 5v14",
+  "new-window": "M14 5h5v5m0-5L10 14m7 0v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4",
+  window: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm-1 4h18",
+  incognito: "M2 11h20M5 11l2-6h10l2 6M9.5 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm10 0a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm-10 0h5",
+  "zoom-in": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM10.5 8v5M8 10.5h5",
+  "zoom-out": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM8 10.5h5",
+  "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z",
+  camera: "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm8 8.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  split: "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm9 0h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v-13Z",
+  "split-close": "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm10.5 4 4 5m0-5-4 5"
+});
+
+const MAX_TAB_ACTIONS = 5;
+
 export function filterTabActions(query, currentTab) {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery || !currentTab?.id) return [];
+  const currentUrl = currentTab.url || currentTab.pendingUrl || "";
 
   const actions = [
     {
@@ -254,6 +308,158 @@ export function filterTabActions(query, currentTab) {
       nextFavorite: !currentTab.bookmarkId,
       bookmarkId: currentTab.bookmarkId || null,
       icon: "favorite"
+    },
+    ...(currentUrl ? [{
+      id: "copy-url",
+      title: "Copy URL",
+      description: currentUrl,
+      keywords: "copy current page link address url clipboard share",
+      url: currentUrl,
+      icon: "copy"
+    }] : []),
+    ...(isSplitTab(currentTab) ? [
+      {
+        id: "focus-other-pane",
+        title: "Switch split pane",
+        description: "Focus the other pane of this split view",
+        keywords: "split view pane switch focus other side",
+        icon: "split"
+      },
+      {
+        id: "close-other-pane",
+        title: "Close other pane",
+        description: "Close the other pane and keep this tab",
+        keywords: "split view pane close other unsplit exit",
+        icon: "split-close"
+      },
+      {
+        id: "close-split",
+        title: "Close split view",
+        description: "Close every tab in this split view",
+        keywords: "split view close both panes tabs",
+        icon: "close"
+      }
+    ] : []),
+    ...(/^(https?|file):/i.test(currentUrl) ? [{
+      id: "screenshot",
+      title: "Copy screenshot",
+      description: "Copy the visible area of the page as an image",
+      keywords: "screenshot capture image snapshot visible area copy picture",
+      icon: "camera"
+    }] : []),
+    {
+      id: "reload",
+      title: "Reload tab",
+      description: "Reload the current page",
+      keywords: "refresh reload page",
+      icon: "reload"
+    },
+    {
+      id: "hard-reload",
+      title: "Hard reload tab",
+      description: "Reload the current page, ignoring cached content",
+      keywords: "refresh reload bypass cache force",
+      icon: "reload"
+    },
+    {
+      id: "duplicate",
+      title: "Duplicate tab",
+      description: "Open a copy of the current tab",
+      keywords: "duplicate clone copy tab",
+      icon: "duplicate"
+    },
+    {
+      id: "toggle-mute",
+      title: currentTab.mutedInfo?.muted ? "Unmute tab" : "Mute tab",
+      description: currentTab.mutedInfo?.muted
+        ? "Allow the current tab to play sound"
+        : "Silence the current tab",
+      keywords: "mute unmute sound audio silence volume",
+      icon: currentTab.mutedInfo?.muted ? "unmute" : "mute"
+    },
+    {
+      id: "go-back",
+      title: "Go back",
+      description: "Return to the previous page in this tab",
+      keywords: "back history previous navigate",
+      icon: "back"
+    },
+    {
+      id: "go-forward",
+      title: "Go forward",
+      description: "Go to the next page in this tab",
+      keywords: "forward history next navigate",
+      icon: "forward"
+    },
+    {
+      id: "close-tab",
+      title: "Close tab",
+      description: "Close the current tab",
+      keywords: "close tab remove",
+      icon: "close"
+    },
+    {
+      id: "close-other-tabs",
+      title: "Close other tabs",
+      description: "Close unpinned tabs in this window except the current tab",
+      keywords: "close other tabs remove others window",
+      icon: "close"
+    },
+    {
+      id: "close-tabs-right",
+      title: "Close tabs to the right",
+      description: "Close unpinned tabs after the current tab",
+      keywords: "close tabs right after remove",
+      icon: "close-right"
+    },
+    {
+      id: "new-window",
+      title: "New window",
+      description: "Open a new browser window",
+      keywords: "new window open create",
+      icon: "window"
+    },
+    {
+      id: "new-incognito-window",
+      title: "New incognito window",
+      description: "Open a new private window",
+      keywords: "new incognito private window open create",
+      icon: "incognito"
+    },
+    ...(/^(https?|file):/i.test(currentUrl) ? [{
+      id: "open-in-incognito",
+      title: "Open page in incognito window",
+      description: "Reopen the current page in a private window",
+      keywords: "incognito private window open page current",
+      icon: "incognito"
+    }] : []),
+    {
+      id: "move-to-new-window",
+      title: "Move tab to new window",
+      description: "Open the current tab in its own window",
+      keywords: "move tab new window detach separate",
+      icon: "new-window"
+    },
+    {
+      id: "zoom-in",
+      title: "Zoom in",
+      description: "Make the current page larger",
+      keywords: "zoom in larger bigger magnify",
+      icon: "zoom-in"
+    },
+    {
+      id: "zoom-out",
+      title: "Zoom out",
+      description: "Make the current page smaller",
+      keywords: "zoom out smaller",
+      icon: "zoom-out"
+    },
+    {
+      id: "zoom-reset",
+      title: "Reset zoom",
+      description: "Return the current page to its default size",
+      keywords: "zoom reset actual size default 100",
+      icon: "zoom-reset"
     }
   ];
 
@@ -267,7 +473,86 @@ export function filterTabActions(query, currentTab) {
     }))
     .filter(({ score }) => score !== null)
     .sort((left, right) => right.score - left.score)
-    .map(({ action }) => action);
+    .slice(0, MAX_TAB_ACTIONS)
+    .map(({ action }) => ACTION_ICON_PATHS[action.icon]
+      ? { ...action, iconPath: ACTION_ICON_PATHS[action.icon] }
+      : action);
+}
+
+const MAX_EXTENSION_RESULTS = 5;
+
+export function filterExtensions(extensions, query, selfId) {
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return [];
+
+  return (extensions || [])
+    .filter((extension) => extension.type === "extension" && extension.id !== selfId)
+    .map((extension) => ({
+      extension,
+      score: scoreTab({ title: extension.name || "", url: "" }, normalizedQuery)
+    }))
+    .filter(({ score }) => score !== null)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_EXTENSION_RESULTS)
+    .map(({ extension }) => extension);
+}
+
+export function extensionRows(extension) {
+  const parentSettingId = `extension:${extension.id}`;
+  const child = (action, title, description, icon) => ({
+    kind: "extension-action",
+    parentSettingId,
+    extensionId: extension.id,
+    extensionAction: action,
+    subtitle: description,
+    setting: { id: `${parentSettingId}:${action}`, title, description, icon }
+  });
+  return [
+    {
+      kind: "extension",
+      expandable: true,
+      extensionId: extension.id,
+      subtitle: `${extension.enabled ? "Enabled" : "Disabled"} extension${extension.version ? ` · ${extension.version}` : ""}`,
+      setting: {
+        id: parentSettingId,
+        title: extension.name,
+        description: extension.description || "",
+        icon: "extensions"
+      }
+    },
+    ...(extension.optionsUrl
+      ? [child("options", "Open options", `Configure ${extension.name}`, "settings")]
+      : []),
+    ...(extension.mayDisable
+      ? [child(
+          "toggle",
+          extension.enabled ? "Disable" : "Enable",
+          `${extension.enabled ? "Turn off" : "Turn on"} ${extension.name}`,
+          "extensions"
+        )]
+      : []),
+    child("details", "Show details", "Permissions, site access, and shortcuts", "extensions")
+  ];
+}
+
+const ZOOM_LEVELS = Object.freeze([0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]);
+
+export function nextZoomLevel(current, direction) {
+  if (direction > 0) return ZOOM_LEVELS.find((level) => level > current + 0.001) ?? ZOOM_LEVELS.at(-1);
+  return ZOOM_LEVELS.findLast((level) => level < current - 0.001) ?? ZOOM_LEVELS[0];
+}
+
+// Pages that host the overlay must never load a tab's own favicon URL: a
+// public page requesting http://localhost/favicon.ico or a LAN address
+// triggers Chromium's Local Network Access prompt. The extension favicon
+// endpoint serves the browser's cached icon without any page-initiated fetch.
+export function cachedFaviconUrl(faviconEndpoint, pageUrl, favIconUrl = "") {
+  if (favIconUrl.startsWith("data:")) return favIconUrl;
+  if (!/^(https?|file):/i.test(pageUrl || "")) return "";
+  const url = new URL(faviconEndpoint);
+  url.searchParams.set("pageUrl", pageUrl);
+  url.searchParams.set("size", "32");
+  return url.href;
 }
 
 export function getSettingForTab(tab) {

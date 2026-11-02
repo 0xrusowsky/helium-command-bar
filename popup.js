@@ -3,6 +3,7 @@ import {
   attachBookmarkMetadata,
   bookmarkUrlKey,
   bookmarksInFolders,
+  cachedFaviconUrl,
   displayTabTitle,
   filterBookmarks,
   filterHistory,
@@ -73,6 +74,14 @@ function launchRow(input) {
   return { kind: "launch", target };
 }
 
+function safeFaviconUrl(item) {
+  return cachedFaviconUrl(
+    chrome.runtime.getURL("/_favicon/"),
+    item.url || item.pendingUrl,
+    item.favIconUrl || ""
+  );
+}
+
 function bookmarkWithFavicon(bookmark) {
   const url = new URL(chrome.runtime.getURL("/_favicon/"));
   url.searchParams.set("pageUrl", bookmark.url);
@@ -108,7 +117,9 @@ function updateRows({ resetSelection = false } = {}) {
   const currentTab = currentRawTab
     ? attachBookmarkMetadata([currentRawTab], configuredBookmarks)[0]
     : null;
-  const matchedTabActions = filterTabActions(input, currentTab);
+  // The popup only appears on protected pages, which cannot be captured.
+  const matchedTabActions = filterTabActions(input, currentTab)
+    .filter((action) => action.id !== "screenshot");
   const launch = launchRow(input);
   const openSettingTabs = new Map();
   for (const tab of [...allTabs].sort((left, right) =>
@@ -179,7 +190,7 @@ function updateRows({ resetSelection = false } = {}) {
         history: {
           ...closed,
           sessionId: closed.sessionId,
-          favIconUrl: closed.favIconUrl || bookmarkWithFavicon(closed).favIconUrl
+          favIconUrl: safeFaviconUrl(closed)
         }
       })),
       ...matchedHistory.map((history) => ({
@@ -209,8 +220,33 @@ function updateRows({ resetSelection = false } = {}) {
   renderRows();
 }
 
+const footerHints = {
+  window: document.querySelector("#window-help"),
+  incognito: document.querySelector("#incognito-help"),
+  expand: document.querySelector("#expand-help"),
+  back: document.querySelector("#back-help"),
+  close: document.querySelector("#close-help")
+};
+if (!(navigator.userAgentData?.platform === "macOS" || /Mac/.test(navigator.platform))) {
+  for (const key of document.querySelectorAll(".modifier-key")) key.textContent = "Ctrl";
+}
+
+// Show only the shortcuts that apply to the current input and selection.
+function updateFooterHints() {
+  const item = navigationItems[selectedIndex];
+  const hasLaunchTarget = Boolean(resolveInput(queryInput.value));
+  footerHints.window.hidden = !hasLaunchTarget;
+  footerHints.incognito.hidden = !hasLaunchTarget;
+  footerHints.expand.hidden = !(item?.kind === "split-group" || (item?.kind === "row" && item.row.expandable));
+  footerHints.back.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.parentSettingId));
+  footerHints.close.hidden = !(item?.kind === "split-member" || (item?.kind === "row" && item.row.kind === "tab"));
+}
+
 function setSelected(index, { scroll = true } = {}) {
-  if (!navigationItems.length) return;
+  if (!navigationItems.length) {
+    updateFooterHints();
+    return;
+  }
   selectedIndex = (index + navigationItems.length) % navigationItems.length;
 
   navigationItems.forEach((item, itemIndex) => {
@@ -222,6 +258,7 @@ function setSelected(index, { scroll = true } = {}) {
   const selectedElement = navigationItems[selectedIndex]?.element;
   queryInput.setAttribute("aria-activedescendant", selectedElement?.id || "");
   if (scroll) selectedElement?.scrollIntoView({ block: "nearest" });
+  updateFooterHints();
 }
 
 function isArrowKey(event, direction, keyCode) {
@@ -250,10 +287,11 @@ function makeTabRow(row, index) {
   fallback.textContent = (displayTitle || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(tab);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
     favicon.className = "favicon";
-    favicon.src = tab.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
@@ -358,9 +396,10 @@ function makeCompactFavicon(tab) {
   fallback.textContent = (displayTabTitle(tab) || hostnameFor(tab) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (tab.favIconUrl && !tab.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(tab);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
-    favicon.src = tab.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
@@ -500,10 +539,11 @@ function makeClosedRow(row, index) {
   fallback.textContent = (closed.title || hostnameFor(closed) || "T").trim().charAt(0).toLocaleUpperCase();
   iconBox.append(fallback);
 
-  if (closed.favIconUrl && !closed.favIconUrl.startsWith("chrome://")) {
+  const faviconUrl = safeFaviconUrl(closed);
+  if (faviconUrl) {
     const favicon = document.createElement("img");
     favicon.className = "favicon";
-    favicon.src = closed.favIconUrl;
+    favicon.src = faviconUrl;
     favicon.alt = "";
     favicon.referrerPolicy = "no-referrer";
     favicon.addEventListener("load", () => fallback.remove());
@@ -543,12 +583,14 @@ function makeTabActionRow(row, index) {
 
   const iconBox = document.createElement("span");
   iconBox.className = `tab-action-icon-box ${action.icon}`;
-  iconBox.append(createSvgIcon(
-    action.icon === "favorite"
-      ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
-      : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
-    action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
-  ));
+  iconBox.append(action.iconPath
+    ? createSvgIcon(action.iconPath, "setting-icon")
+    : createSvgIcon(
+        action.icon === "favorite"
+          ? "m12 3 2.8 5.67 6.26.91-4.53 4.42 1.07 6.24L12 18.1 6.4 21l1.07-6.24-4.53-4.42 6.26-.91L12 3Z"
+          : "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h7v7h2v-7h7v-2c-1.66 0-3-1.34-3-3Z",
+        action.icon === "favorite" ? "favorite-action-icon" : "pin-action-icon"
+      ));
 
   const details = document.createElement("span");
   details.className = "result-details";
@@ -576,6 +618,9 @@ function settingIconPath(setting) {
   }
   if (setting.icon === "bookmarks") {
     return "M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4V4Z";
+  }
+  if (setting.icon === "profile") {
+    return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0";
   }
   return "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.09a2 2 0 0 1 1 1.73v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Zm-.22 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z";
 }
@@ -652,7 +697,9 @@ function bindNavigationItem(element, item) {
   element.dataset.navigationIndex = String(index);
   element.addEventListener("mousedown", (event) => event.preventDefault());
   element.addEventListener("click", () => activateNavigationItem(index));
-  element.addEventListener("mouseenter", () => setSelected(index, { scroll: false }));
+  element.addEventListener("mousemove", () => {
+    if (pointerMoved && selectedIndex !== index) setSelected(index, { scroll: false });
+  });
   return element;
 }
 
@@ -799,11 +846,26 @@ async function restoreSession(closed) {
   }
 }
 
-async function openInput(target = resolveInput(queryInput.value)) {
+async function openInput(target = resolveInput(queryInput.value), disposition = "tab") {
   if (!target) return;
 
   try {
-    if (target.kind === "url") {
+    if (disposition === "window" || disposition === "incognito") {
+      const incognito = disposition === "incognito";
+      if (target.kind === "url") {
+        await chrome.windows.create({ url: target.url, incognito, focused: true });
+      } else if (!incognito && chrome.search?.query) {
+        await chrome.search.query({ text: target.text, disposition: "NEW_WINDOW" });
+      } else {
+        // Searching inside incognito requires incognito access; otherwise
+        // the new window stays on its new-tab page.
+        const createdWindow = await chrome.windows.create({ incognito, focused: true });
+        const tabId = createdWindow.tabs?.[0]?.id;
+        if (tabId !== undefined) {
+          await chrome.search.query({ text: target.text, tabId }).catch(() => {});
+        }
+      }
+    } else if (target.kind === "url") {
       await chrome.tabs.create({ url: target.url, active: true });
     } else if (chrome.search?.query) {
       chrome.search.query({ text: target.text, disposition: "NEW_TAB" });
@@ -821,6 +883,11 @@ async function openInput(target = resolveInput(queryInput.value)) {
 
 async function runTabAction(row) {
   try {
+    if (row.action.id === "copy-url") {
+      await navigator.clipboard.writeText(row.action.url);
+      closeCommandBar();
+      return;
+    }
     const message = row.action.id === "toggle-favorite"
       ? {
           type: "helium-command-bar:set-favorite",
@@ -828,11 +895,17 @@ async function runTabAction(row) {
           favorite: row.action.nextFavorite,
           bookmarkId: row.action.bookmarkId
         }
-      : {
-          type: "helium-command-bar:set-pinned",
-          tabId: row.tabId,
-          pinned: row.action.nextPinned
-        };
+      : row.action.id === "toggle-pin"
+        ? {
+            type: "helium-command-bar:set-pinned",
+            tabId: row.tabId,
+            pinned: row.action.nextPinned
+          }
+        : {
+            type: "helium-command-bar:tab-action",
+            tabId: row.tabId,
+            actionId: row.action.id
+          };
     const response = await chrome.runtime.sendMessage(message);
     if (!response?.ok) throw new Error("The browser did not update the tab");
     closeCommandBar();
@@ -991,6 +1064,17 @@ async function loadHistory(query) {
   }
 }
 
+// The UI can appear under a stationary cursor, and Chromium then dispatches
+// hover events (and synthetic mousemoves after re-renders or scrolling)
+// without real pointer movement. Only let actual movement change selection.
+let pointerMoved = false;
+let lastPointerPosition = null;
+document.addEventListener("mousemove", (event) => {
+  pointerMoved = lastPointerPosition !== null &&
+    (event.screenX !== lastPointerPosition.x || event.screenY !== lastPointerPosition.y);
+  lastPointerPosition = { x: event.screenX, y: event.screenY };
+}, { capture: true });
+
 queryInput.addEventListener("input", () => {
   splitNavigationKeys.clear();
   expandedSettingIds.clear();
@@ -1039,7 +1123,9 @@ queryInput.addEventListener("keydown", async (event) => {
     }
   } else if (isKey(event, "Enter", 13)) {
     event.preventDefault();
-    if (event.metaKey || event.ctrlKey) await openInput();
+    const modified = event.metaKey || event.ctrlKey;
+    if (event.shiftKey) await openInput(undefined, modified ? "incognito" : "window");
+    else if (modified) await openInput();
     else await activateNavigationItem();
   } else if (isKey(event, "Backspace", 8) && (event.metaKey || event.ctrlKey)) {
     const item = navigationItems[selectedIndex];

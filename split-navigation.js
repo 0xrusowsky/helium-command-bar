@@ -13,7 +13,7 @@ import {
   DEFAULT_COMMAND_BAR_COLOR,
   normalizeThemeColor,
 } from "./theme.js";
-import { duplicateTabIds } from "./search.js";
+import { cachedFaviconUrl, duplicateTabIds } from "./search.js";
 import { checkForExtensionUpdate } from "./update.js";
 
 const FOCUS_STATE_KEY = "lastFocusedBySplit";
@@ -105,7 +105,11 @@ function tabForViewer(tab) {
     id: tab.id,
     title: tab.title || "Untitled tab",
     subtitle: tabSubtitle(tab),
-    favIconUrl: tab.favIconUrl || "",
+    favIconUrl: cachedFaviconUrl(
+      chrome.runtime.getURL("/_favicon/"),
+      tab.url || tab.pendingUrl,
+      tab.favIconUrl,
+    ),
   };
 }
 
