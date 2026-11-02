@@ -791,11 +791,15 @@
         settingId: item.row.setting.id,
         tabId: item.row.tab?.id
       });
-    } else if (item.row.kind === "extension" || item.row.kind === "extension-action") {
+    } else if (item.row.kind === "extension") {
+      // Chromium does not let extensions open another extension's toolbar
+      // popup, so Enter reveals the actions that are possible instead.
+      expandRow(item.row);
+    } else if (item.row.kind === "extension-action") {
       await sendAction({
         type: "helium-command-bar:extension-action",
         extensionId: item.row.extensionId,
-        action: item.row.extensionAction || "default"
+        action: item.row.extensionAction
       });
     } else if (item.row.kind === "update" || item.row.kind === "extension-update") {
       reloadExtension();
@@ -830,6 +834,17 @@
     } else {
       await openInput(editingCurrentUrl ? "current" : "tab");
     }
+  }
+
+  function expandRow(row) {
+    expandedSettingIds.add(row.setting.id);
+    renderRows();
+    const childIndex = navigationItems.findIndex((candidate) =>
+      candidate.kind === "row" &&
+      candidate.row.parentSettingId === row.setting.id
+    );
+    if (childIndex !== -1) setSelected(childIndex);
+    queryInput.focus({ preventScroll: true });
   }
 
   function enterSplitNavigation(item) {
@@ -959,14 +974,7 @@
         enterSplitNavigation(item);
       } else if (item?.kind === "row" && item.row.expandable) {
         event.preventDefault();
-        expandedSettingIds.add(item.row.setting.id);
-        renderRows();
-        const childIndex = navigationItems.findIndex((candidate) =>
-          candidate.kind === "row" &&
-          candidate.row.parentSettingId === item.row.setting.id
-        );
-        if (childIndex !== -1) setSelected(childIndex);
-        queryInput.focus({ preventScroll: true });
+        expandRow(item.row);
       }
     } else if (isArrowKey(event, "Left", 37)) {
       const item = navigationItems[selectedIndex];
