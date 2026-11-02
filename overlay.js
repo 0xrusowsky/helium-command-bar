@@ -580,9 +580,10 @@
     const enterHint = editingCurrentUrl
       ? element("kbd", "enter-hint", "↵")
       : element("kbd", "enter-hint", isMac ? "⌘↵" : "Ctrl↵");
-    enterHint.title = editingCurrentUrl
-      ? `Open or search in the current tab · ${isMac ? "⌘↵" : "Ctrl↵"} for a new tab`
-      : "Always open or search the input in a new tab";
+    const modifier = isMac ? "⌘" : "Ctrl";
+    enterHint.title = `${editingCurrentUrl
+      ? `Open or search in the current tab · ${modifier}↵ for a new tab`
+      : "Always open or search the input in a new tab"} · ⇧↵ new window · ${modifier}⇧↵ incognito window`;
     rowElement.append(iconBox, details, enterHint);
     return rowElement;
   }
@@ -817,7 +818,7 @@
               actionId: action.id
             });
     } else {
-      await openInput();
+      await openInput(editingCurrentUrl ? "current" : "tab");
     }
   }
 
@@ -839,11 +840,12 @@
     if (groupIndex !== -1) setSelected(groupIndex);
   }
 
-  async function openInput({ newTab = false } = {}) {
+  // disposition: "current", "tab", "window", or "incognito".
+  async function openInput(disposition) {
     await sendAction({
       type: "helium-command-bar:open-input",
       input: queryInput.value,
-      currentTab: editingCurrentUrl && !newTab
+      disposition
     });
   }
 
@@ -961,7 +963,9 @@
       await copyUrl();
     } else if (isKey(event, "Enter", 13)) {
       event.preventDefault();
-      if (event.metaKey || event.ctrlKey) await openInput({ newTab: true });
+      const modified = event.metaKey || event.ctrlKey;
+      if (event.shiftKey) await openInput(modified ? "incognito" : "window");
+      else if (modified) await openInput("tab");
       else await activateNavigationItem();
     } else if (isKey(event, "Backspace", 8) && (event.metaKey || event.ctrlKey)) {
       const item = navigationItems[selectedIndex];

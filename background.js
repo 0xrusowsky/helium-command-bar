@@ -463,6 +463,25 @@ async function querySplitPickerRows(query, pickerTabId) {
   };
 }
 
+async function openTargetInNewWindow(target, incognito) {
+  if (target.kind === "url") {
+    await chrome.windows.create({ url: target.url, incognito, focused: true });
+  } else if (!incognito && chrome.search?.query) {
+    await chrome.search.query({ text: target.text, disposition: "NEW_WINDOW" });
+  } else {
+    // The default search engine's URL is not exposed to extensions. Searching
+    // in an incognito tab only works when the extension is allowed there;
+    // otherwise the new incognito window stays on its new-tab page.
+    const createdWindow = await chrome.windows.create({ incognito, focused: true });
+    const tabId = createdWindow.tabs?.[0]?.id;
+    try {
+      if (tabId !== undefined) await chrome.search.query({ text: target.text, tabId });
+    } catch (error) {
+      console.info("Could not search in the incognito window", error);
+    }
+  }
+}
+
 async function runTabAction(actionId, tab) {
   switch (actionId) {
     case "reload":
@@ -516,6 +535,18 @@ async function runTabAction(actionId, tab) {
       const tabIds = getSplitPartners(windowTabs, tab).map((partner) => partner.id);
       if (actionId === "close-split") tabIds.push(tab.id);
       if (tabIds.length) await chrome.tabs.remove(tabIds);
+      break;
+    }
+    case "new-window":
+      await chrome.windows.create({ focused: true });
+      break;
+    case "new-incognito-window":
+      await chrome.windows.create({ incognito: true, focused: true });
+      break;
+    case "open-in-incognito": {
+      const target = resolveInput(tab.url || tab.pendingUrl || "");
+      if (target?.kind !== "url") return { ok: false };
+      await openTargetInNewWindow(target, true);
       break;
     }
     case "move-to-new-window":
@@ -713,7 +744,9 @@ async function handleOverlayMessage(message, sender) {
       const target = resolveInput(typeof message.input === "string" ? message.input.slice(0, 4096) : "");
       if (!target) return { ok: false };
 
-      if (message.currentTab) {
+      if (message.disposition === "window" || message.disposition === "incognito") {
+        await openTargetInNewWindow(target, message.disposition === "incognito");
+      } else if (message.disposition === "current") {
         if (target.kind === "url") {
           await chrome.tabs.update(sender.tab.id, { url: target.url });
         } else if (chrome.search?.query) {

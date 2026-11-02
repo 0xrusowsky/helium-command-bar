@@ -270,6 +270,8 @@ export const ACTION_ICON_PATHS = Object.freeze({
   close: "M6 6l12 12M18 6 6 18",
   "close-right": "M4 12h10m-4-4 4 4-4 4M20 5v14",
   "new-window": "M14 5h5v5m0-5L10 14m7 0v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4",
+  window: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm-1 4h18",
+  incognito: "M2 11h20M5 11l2-6h10l2 6M9.5 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm10 0a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Zm-10 0h5",
   "zoom-in": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM10.5 8v5M8 10.5h5",
   "zoom-out": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM8 10.5h5",
   "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z",
@@ -402,6 +404,27 @@ export function filterTabActions(query, currentTab) {
       keywords: "close tabs right after remove",
       icon: "close-right"
     },
+    {
+      id: "new-window",
+      title: "New window",
+      description: "Open a new browser window",
+      keywords: "new window open create",
+      icon: "window"
+    },
+    {
+      id: "new-incognito-window",
+      title: "New incognito window",
+      description: "Open a new private window",
+      keywords: "new incognito private window open create",
+      icon: "incognito"
+    },
+    ...(/^(https?|file):/i.test(currentUrl) ? [{
+      id: "open-in-incognito",
+      title: "Open page in incognito window",
+      description: "Reopen the current page in a private window",
+      keywords: "incognito private window open page current",
+      icon: "incognito"
+    }] : []),
     {
       id: "move-to-new-window",
       title: "Move tab to new window",

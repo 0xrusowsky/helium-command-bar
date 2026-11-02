@@ -490,3 +490,14 @@ test("offers split actions only inside a split view", () => {
   assert.equal(filterTabActions("close other pane", { id: 1, splitViewId: 4 })[0].id, "close-other-pane");
   assert.equal(ids({ id: 1, splitViewId: -1 }).length, 0);
 });
+
+test("offers window and incognito actions", () => {
+  const tab = { id: 1, url: "https://example.com" };
+  assert.equal(filterTabActions("new window", tab)[0].id, "new-window");
+  assert.equal(filterTabActions("incognito", tab)[0].id, "new-incognito-window");
+  assert.ok(filterTabActions("incognito", tab).some((action) => action.id === "open-in-incognito"));
+  assert.equal(
+    filterTabActions("incognito", { id: 1, url: "chrome://settings" }).some((action) => action.id === "open-in-incognito"),
+    false
+  );
+});

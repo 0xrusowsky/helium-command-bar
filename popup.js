@@ -818,11 +818,26 @@ async function restoreSession(closed) {
   }
 }
 
-async function openInput(target = resolveInput(queryInput.value)) {
+async function openInput(target = resolveInput(queryInput.value), disposition = "tab") {
   if (!target) return;
 
   try {
-    if (target.kind === "url") {
+    if (disposition === "window" || disposition === "incognito") {
+      const incognito = disposition === "incognito";
+      if (target.kind === "url") {
+        await chrome.windows.create({ url: target.url, incognito, focused: true });
+      } else if (!incognito && chrome.search?.query) {
+        await chrome.search.query({ text: target.text, disposition: "NEW_WINDOW" });
+      } else {
+        // Searching inside incognito requires incognito access; otherwise
+        // the new window stays on its new-tab page.
+        const createdWindow = await chrome.windows.create({ incognito, focused: true });
+        const tabId = createdWindow.tabs?.[0]?.id;
+        if (tabId !== undefined) {
+          await chrome.search.query({ text: target.text, tabId }).catch(() => {});
+        }
+      }
+    } else if (target.kind === "url") {
       await chrome.tabs.create({ url: target.url, active: true });
     } else if (chrome.search?.query) {
       chrome.search.query({ text: target.text, disposition: "NEW_TAB" });
@@ -1080,7 +1095,9 @@ queryInput.addEventListener("keydown", async (event) => {
     }
   } else if (isKey(event, "Enter", 13)) {
     event.preventDefault();
-    if (event.metaKey || event.ctrlKey) await openInput();
+    const modified = event.metaKey || event.ctrlKey;
+    if (event.shiftKey) await openInput(undefined, modified ? "incognito" : "window");
+    else if (modified) await openInput();
     else await activateNavigationItem();
   } else if (isKey(event, "Backspace", 8) && (event.metaKey || event.ctrlKey)) {
     const item = navigationItems[selectedIndex];

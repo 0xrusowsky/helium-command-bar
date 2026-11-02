@@ -74,6 +74,7 @@ Chromium forbids injection on protected pages such as `chrome://` URLs and the C
 - As soon as you type, opening the URL or searching with the default search engine is always the first selected option.
 - Press **Enter** to use that first option, or **Down** to choose a matching open/recently closed tab.
 - Press **Command/Ctrl + Enter** to open the input directly regardless of the current selection; this shortcut is shown on the open/search option.
+- Press **Shift + Enter** to open the input in a new window, or **Command/Ctrl + Shift + Enter** for an incognito window. Type **New window**, **New incognito window**, or **Open page in incognito window** for the matching actions. Searching text in incognito needs **Allow in Incognito** enabled for the extension; otherwise the incognito window opens on its new-tab page.
 - Press **Command/Ctrl + Backspace** to close the selected tab.
 - The **Move the current preview tab into the main Helium window** command uses `chrome.tabs.move` to preserve the live page when the Little Helium preview receives **Command + O**.
 - Type **Settings** to open `helium://settings`, **Keyboard shortcuts** (or **hotkeys**) to open `helium://settings/system/shortcuts`, **Extensions** (also **add-ons** or **plugins**) to open `helium://extensions`, or **Manage bookmarks** to open `helium://bookmarks`. Press **Right Arrow** on **Extensions** to reveal the Helium Command Bar settings, then **Left Arrow** to collapse it.
