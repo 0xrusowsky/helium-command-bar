@@ -483,3 +483,10 @@ test("steps through browser zoom levels", () => {
   assert.equal(nextZoomLevel(5, 1), 5);
   assert.equal(nextZoomLevel(0.25, -1), 0.25);
 });
+
+test("offers split actions only inside a split view", () => {
+  const ids = (tab) => filterTabActions("split", tab).map((action) => action.id);
+  assert.ok(ids({ id: 1, splitViewId: 4 }).includes("focus-other-pane"));
+  assert.equal(filterTabActions("close other pane", { id: 1, splitViewId: 4 })[0].id, "close-other-pane");
+  assert.equal(ids({ id: 1, splitViewId: -1 }).length, 0);
+});

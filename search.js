@@ -272,7 +272,9 @@ export const ACTION_ICON_PATHS = Object.freeze({
   "new-window": "M14 5h5v5m0-5L10 14m7 0v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h4",
   "zoom-in": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM10.5 8v5M8 10.5h5",
   "zoom-out": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM8 10.5h5",
-  "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z"
+  "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z",
+  split: "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm9 0h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v-13Z",
+  "split-close": "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm10.5 4 4 5m0-5-4 5"
 });
 
 const MAX_TAB_ACTIONS = 5;
@@ -312,6 +314,29 @@ export function filterTabActions(query, currentTab) {
       url: currentUrl,
       icon: "copy"
     }] : []),
+    ...(isSplitTab(currentTab) ? [
+      {
+        id: "focus-other-pane",
+        title: "Switch split pane",
+        description: "Focus the other pane of this split view",
+        keywords: "split view pane switch focus other side",
+        icon: "split"
+      },
+      {
+        id: "close-other-pane",
+        title: "Close other pane",
+        description: "Close the other pane and keep this tab",
+        keywords: "split view pane close other unsplit exit",
+        icon: "split-close"
+      },
+      {
+        id: "close-split",
+        title: "Close split view",
+        description: "Close every tab in this split view",
+        keywords: "split view close both panes tabs",
+        icon: "close"
+      }
+    ] : []),
     {
       id: "reload",
       title: "Reload tab",

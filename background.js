@@ -29,7 +29,7 @@ import {
   DEFAULT_COMMAND_BAR_COLOR,
   commandBarThemeCss
 } from "./theme.js";
-import { unfocusedNewTabIds } from "./navigation.js";
+import { Direction, getSplitPaneCycleTarget, unfocusedNewTabIds } from "./navigation.js";
 import { checkForExtensionUpdate, getExtensionUpdateState } from "./update.js";
 
 const NATIVE_SPLIT_PICKER_URL = "chrome://tab-search.top-chrome/split_new_tab_page.html";
@@ -498,6 +498,23 @@ async function runTabAction(actionId, tab) {
           (actionId === "close-other-tabs" || candidate.index > tab.index)
         )
         .map((candidate) => candidate.id);
+      if (tabIds.length) await chrome.tabs.remove(tabIds);
+      break;
+    }
+    case "focus-other-pane":
+    case "close-other-pane":
+    case "close-split": {
+      const splitViewIdNone = chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1;
+      if (!isSplitTab(tab, splitViewIdNone)) return { ok: false };
+      const windowTabs = await chrome.tabs.query({ windowId: tab.windowId });
+      if (actionId === "focus-other-pane") {
+        const target = getSplitPaneCycleTarget(windowTabs, tab.id, Direction.NEXT, splitViewIdNone);
+        if (!target) return { ok: false };
+        await chrome.tabs.update(target.id, { active: true });
+        break;
+      }
+      const tabIds = getSplitPartners(windowTabs, tab).map((partner) => partner.id);
+      if (actionId === "close-split") tabIds.push(tab.id);
       if (tabIds.length) await chrome.tabs.remove(tabIds);
       break;
     }
