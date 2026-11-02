@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   cachedFaviconUrl,
+  extensionRows,
+  filterExtensions,
   DEFAULT_RESULT_SECTION_ORDER,
   attachBookmarkMetadata,
   bookmarkUrlKey,
@@ -500,4 +502,22 @@ test("offers window and incognito actions", () => {
     filterTabActions("incognito", { id: 1, url: "chrome://settings" }).some((action) => action.id === "open-in-incognito"),
     false
   );
+});
+
+test("finds installed extensions by name and builds their actions", () => {
+  const extensions = [
+    { id: "self", name: "Helium Command Bar", type: "extension", enabled: true },
+    { id: "ublock", name: "uBlock Origin", type: "extension", enabled: true, mayDisable: true, optionsUrl: "chrome-extension://ublock/options.html" },
+    { id: "theme", name: "Blue theme", type: "theme", enabled: true }
+  ];
+  assert.deepEqual(filterExtensions(extensions, "ublock", "self").map((extension) => extension.id), ["ublock"]);
+  assert.equal(filterExtensions(extensions, "helium command", "self").length, 0);
+  assert.equal(filterExtensions(extensions, "blue", "self").length, 0);
+  assert.deepEqual(filterExtensions(extensions, "", "self"), []);
+
+  const [parent, ...children] = extensionRows(extensions[1]);
+  assert.equal(parent.expandable, true);
+  assert.deepEqual(children.map((row) => row.extensionAction), ["options", "toggle", "details"]);
+  assert.ok(children.every((row) => row.parentSettingId === parent.setting.id));
+  assert.equal(children[1].setting.title, "Disable");
 });

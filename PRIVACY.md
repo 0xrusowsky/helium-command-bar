@@ -11,6 +11,7 @@ To provide its features, Helium Command Bar accesses the following information i
 - open-tab titles, URLs, favicons, activation state, and split membership;
 - browser bookmarks selected for display as favorites;
 - recently closed tabs and windows;
+- names, versions, and enabled state of installed extensions, when the user searches for them;
 - extension preferences, such as appearance, result ordering, duplicate-tab cleanup, and split-navigation state;
 - search text or URLs that the user explicitly enters into the command bar.
 

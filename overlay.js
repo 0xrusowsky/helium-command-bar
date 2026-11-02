@@ -539,7 +539,7 @@
       element(
         "span",
         "result-subtitle",
-        row.tab ? `${setting.description} · Open tab` : `${setting.description} · Helium`
+        row.subtitle ?? (row.tab ? `${setting.description} · Open tab` : `${setting.description} · Helium`)
       )
     );
     rowElement.append(
@@ -625,13 +625,13 @@
     while (rowIndex < rows.length) {
       const row = rows[rowIndex];
       if (
-        (row.kind === "extension-setting" || row.kind === "extension-update") &&
+        row.parentSettingId &&
         !expandedSettingIds.has(row.parentSettingId)
       ) {
         rowIndex += 1;
         continue;
       }
-      if (row.kind === "setting" && row.expandable && expandedSettingIds.has(row.setting.id)) {
+      if (row.expandable && expandedSettingIds.has(row.setting.id)) {
         const childRows = [];
         rowIndex += 1;
         while (rowIndex < rows.length && rows[rowIndex].parentSettingId === row.setting.id) {
@@ -692,10 +692,10 @@
       else if (row.kind === "bookmark") rowElement = makeBookmarkRow(row, navigationItems.length);
       else if (row.kind === "closed") rowElement = makeClosedRow(row, navigationItems.length);
       else if (row.kind === "history") rowElement = makeHistoryRow(row, navigationItems.length);
-      else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update") rowElement = makeSettingRow(row, navigationItems.length);
+      else if (row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "extension" || row.kind === "extension-action") rowElement = makeSettingRow(row, navigationItems.length);
       else if (row.kind === "tab-action") rowElement = makeTabActionRow(row, navigationItems.length);
       else rowElement = makeLaunchRow(row, navigationItems.length);
-      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "tab-action"
+      const section = row.kind === "launch" || row.kind === "setting" || row.kind === "extension-setting" || row.kind === "extension-update" || row.kind === "update" || row.kind === "tab-action" || row.kind === "extension" || row.kind === "extension-action"
         ? sections.search
         : row.kind === "bookmark"
           ? sections.favorites
@@ -790,6 +790,12 @@
         type: "helium-command-bar:open-setting",
         settingId: item.row.setting.id,
         tabId: item.row.tab?.id
+      });
+    } else if (item.row.kind === "extension" || item.row.kind === "extension-action") {
+      await sendAction({
+        type: "helium-command-bar:extension-action",
+        extensionId: item.row.extensionId,
+        action: item.row.extensionAction || "default"
       });
     } else if (item.row.kind === "update" || item.row.kind === "extension-update") {
       reloadExtension();
@@ -941,7 +947,7 @@
       if (item?.kind === "split-member") {
         event.preventDefault();
         exitSplitNavigation(item);
-      } else if (item?.kind === "row" && (item.row.kind === "extension-setting" || item.row.kind === "extension-update")) {
+      } else if (item?.kind === "row" && item.row.parentSettingId) {
         event.preventDefault();
         expandedSettingIds.delete(item.row.parentSettingId);
         renderRows();

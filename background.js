@@ -9,7 +9,9 @@ import {
   cachedFaviconUrl,
   displayTabTitle,
   duplicateTabIds,
+  extensionRows,
   filterBookmarks,
+  filterExtensions,
   filterHistory,
   filterRecentlyClosed,
   filterSettings,
@@ -264,7 +266,7 @@ function tabForOverlay(tab) {
 
 async function queryRows(query, requesterTab) {
   const input = typeof query === "string" ? query.slice(0, 4096) : "";
-  const [tabs, sessions, bookmarks, historyItems, css, settings, updateState] = await Promise.all([
+  const [tabs, sessions, bookmarks, historyItems, css, settings, updateState, extensions] = await Promise.all([
     chrome.tabs.query({}),
     chrome.sessions.getRecentlyClosed({ maxResults: 25 }),
     getBookmarks(),
@@ -281,7 +283,10 @@ async function queryRows(query, requesterTab) {
       favoriteFolderIds: null,
       resultSectionOrder: DEFAULT_RESULT_SECTION_ORDER
     }),
-    getExtensionUpdateState()
+    getExtensionUpdateState(),
+    input.trim() && chrome.management
+      ? chrome.management.getAll()
+      : Promise.resolve([])
   ]);
   const configuredBookmarks = bookmarksInFolders(bookmarks, settings.favoriteFolderIds);
   const enabledBookmarks = settings.showFavorites === false ? [] : configuredBookmarks;
@@ -367,7 +372,8 @@ async function queryRows(query, requesterTab) {
       kind: "tab-action",
       action,
       tabId: requesterTab.id
-    }))
+    })),
+    ...filterExtensions(extensions, input, chrome.runtime.id).flatMap(extensionRows)
   ];
   const sectionOrder = normalizeResultSectionOrder(settings.resultSectionOrder);
   const sectionRows = {
@@ -729,6 +735,23 @@ async function handleOverlayMessage(message, sender) {
           active: true,
           windowId: sender.tab.windowId
         });
+      }
+      return { ok: true };
+    }
+
+    case "helium-command-bar:extension-action": {
+      if (!chrome.management || typeof message.extensionId !== "string") {
+        throw new Error("Invalid extension");
+      }
+      const extension = await chrome.management.get(message.extensionId);
+      const detailsUrl = `chrome://extensions/?id=${encodeURIComponent(extension.id)}`;
+      if (message.action === "toggle") {
+        await chrome.management.setEnabled(extension.id, !extension.enabled);
+      } else {
+        const url = message.action === "details" || !extension.optionsUrl
+          ? detailsUrl
+          : extension.optionsUrl;
+        await chrome.tabs.create({ url, active: true, windowId: sender.tab.windowId });
       }
       return { ok: true };
     }

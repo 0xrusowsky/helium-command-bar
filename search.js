@@ -471,6 +471,62 @@ export function filterTabActions(query, currentTab) {
       : action);
 }
 
+const MAX_EXTENSION_RESULTS = 5;
+
+export function filterExtensions(extensions, query, selfId) {
+  const normalizedQuery = normalize(query);
+  if (!normalizedQuery) return [];
+
+  return (extensions || [])
+    .filter((extension) => extension.type === "extension" && extension.id !== selfId)
+    .map((extension) => ({
+      extension,
+      score: scoreTab({ title: extension.name || "", url: "" }, normalizedQuery)
+    }))
+    .filter(({ score }) => score !== null)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_EXTENSION_RESULTS)
+    .map(({ extension }) => extension);
+}
+
+export function extensionRows(extension) {
+  const parentSettingId = `extension:${extension.id}`;
+  const child = (action, title, description, icon) => ({
+    kind: "extension-action",
+    parentSettingId,
+    extensionId: extension.id,
+    extensionAction: action,
+    subtitle: description,
+    setting: { id: `${parentSettingId}:${action}`, title, description, icon }
+  });
+  return [
+    {
+      kind: "extension",
+      expandable: true,
+      extensionId: extension.id,
+      subtitle: `${extension.enabled ? "Enabled" : "Disabled"} extension${extension.version ? ` · ${extension.version}` : ""}`,
+      setting: {
+        id: parentSettingId,
+        title: extension.name,
+        description: extension.description || "",
+        icon: "extensions"
+      }
+    },
+    ...(extension.optionsUrl
+      ? [child("options", "Open options", `Configure ${extension.name}`, "settings")]
+      : []),
+    ...(extension.mayDisable
+      ? [child(
+          "toggle",
+          extension.enabled ? "Disable" : "Enable",
+          `${extension.enabled ? "Turn off" : "Turn on"} ${extension.name}`,
+          "extensions"
+        )]
+      : []),
+    child("details", "Show details", "Permissions, site access, and shortcuts", "extensions")
+  ];
+}
+
 const ZOOM_LEVELS = Object.freeze([0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]);
 
 export function nextZoomLevel(current, direction) {
