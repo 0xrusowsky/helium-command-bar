@@ -117,7 +117,9 @@ function updateRows({ resetSelection = false } = {}) {
   const currentTab = currentRawTab
     ? attachBookmarkMetadata([currentRawTab], configuredBookmarks)[0]
     : null;
-  const matchedTabActions = filterTabActions(input, currentTab);
+  // The popup only appears on protected pages, which cannot be captured.
+  const matchedTabActions = filterTabActions(input, currentTab)
+    .filter((action) => action.id !== "screenshot");
   const launch = launchRow(input);
   const openSettingTabs = new Map();
   for (const tab of [...allTabs].sort((left, right) =>

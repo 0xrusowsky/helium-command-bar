@@ -67,7 +67,7 @@ Certify all applicable Limited Use statements: no sale, no use unrelated to the 
 
 ### activeTab
 
-Used only after the user invokes the extension, allowing the command-bar overlay to be inserted into the active page.
+Used only after the user invokes the extension, allowing the command-bar overlay to be inserted into the active page and, when the user chooses Copy screenshot, capturing that page's visible area locally for the clipboard.
 
 ### bookmarks
 

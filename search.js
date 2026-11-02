@@ -275,6 +275,7 @@ export const ACTION_ICON_PATHS = Object.freeze({
   "zoom-in": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM10.5 8v5M8 10.5h5",
   "zoom-out": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0ZM8 10.5h5",
   "zoom-reset": "m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z",
+  camera: "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm8 8.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   split: "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm9 0h7a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v-13Z",
   "split-close": "M4 5.5h7v13H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Zm10.5 4 4 5m0-5-4 5"
 });
@@ -339,6 +340,13 @@ export function filterTabActions(query, currentTab) {
         icon: "close"
       }
     ] : []),
+    ...(/^(https?|file):/i.test(currentUrl) ? [{
+      id: "screenshot",
+      title: "Copy screenshot",
+      description: "Copy the visible area of the page as an image",
+      keywords: "screenshot capture image snapshot visible area copy picture",
+      icon: "camera"
+    }] : []),
     {
       id: "reload",
       title: "Reload tab",

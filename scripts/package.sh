@@ -25,6 +25,9 @@ FILES=(
   popup.css
   popup.html
   popup.js
+  screenshot.css
+  screenshot.html
+  screenshot.js
   search.js
   split-navigation.js
   split-picker.css

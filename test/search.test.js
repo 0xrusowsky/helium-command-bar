@@ -521,3 +521,8 @@ test("finds installed extensions by name and builds their actions", () => {
   assert.ok(children.every((row) => row.parentSettingId === parent.setting.id));
   assert.equal(children[1].setting.title, "Disable");
 });
+
+test("offers a screenshot only for web pages", () => {
+  assert.equal(filterTabActions("screenshot", { id: 1, url: "https://example.com" })[0].id, "screenshot");
+  assert.equal(filterTabActions("screenshot", { id: 1, url: "chrome://settings" }).length, 0);
+});

@@ -805,6 +805,10 @@
         await copyUrl(action.url);
         return;
       }
+      if (action.id === "screenshot") {
+        await copyScreenshot();
+        return;
+      }
       await sendAction(action.id === "toggle-favorite"
         ? {
             type: "helium-command-bar:set-favorite",
@@ -865,6 +869,28 @@
     expandedSettingIds.clear();
     void refreshRows({ resetSelection: true });
     focusCommandBar();
+  }
+
+  async function copyScreenshot() {
+    // Capture the page without the overlay: remove it and wait for a repaint.
+    closeCommandBar();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "helium-command-bar:capture-visible-tab" });
+      if (!response?.dataUrl) return;
+      const bytes = Uint8Array.from(atob(response.dataUrl.split(",")[1]), (character) => character.charCodeAt(0));
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })
+      ]);
+    } catch (error) {
+      // Insecure pages have no async clipboard API. Show the capture in an
+      // extension page, which can copy or save it.
+      console.info("Opening the screenshot instead of copying it", error);
+      if (response?.dataUrl) {
+        void chrome.runtime.sendMessage({ type: "helium-command-bar:show-screenshot" }).catch(() => {});
+      }
+    }
   }
 
   async function copyUrl(url = currentUrl) {

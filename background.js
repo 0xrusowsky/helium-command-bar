@@ -42,6 +42,8 @@ const inactiveEffectByTab = new Map();
 let lastFocusedWindowId;
 let previousFocusedWindowId;
 
+let lastScreenshotDataUrl = null;
+
 let commandBarCssPromise;
 let bookmarkCachePromise;
 
@@ -738,6 +740,24 @@ async function handleOverlayMessage(message, sender) {
       }
       return { ok: true };
     }
+
+    case "helium-command-bar:capture-visible-tab":
+      // activeTab, granted when the user invoked the command bar, permits
+      // capturing the invoking tab.
+      lastScreenshotDataUrl = await chrome.tabs.captureVisibleTab(sender.tab.windowId, { format: "png" });
+      return { ok: true, dataUrl: lastScreenshotDataUrl };
+
+    case "helium-command-bar:show-screenshot":
+      if (!lastScreenshotDataUrl) return { ok: false };
+      await chrome.tabs.create({
+        url: chrome.runtime.getURL("screenshot.html"),
+        active: true,
+        windowId: sender.tab.windowId
+      });
+      return { ok: true };
+
+    case "helium-command-bar:get-screenshot":
+      return { ok: Boolean(lastScreenshotDataUrl), dataUrl: lastScreenshotDataUrl };
 
     case "helium-command-bar:extension-action": {
       if (!chrome.management || typeof message.extensionId !== "string") {
